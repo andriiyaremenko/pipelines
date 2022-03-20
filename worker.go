@@ -1,8 +1,7 @@
-package command
+package pipelines
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 )
@@ -13,35 +12,30 @@ var (
 
 // Returns CommandWorker based on Commands.
 // eventSink is used to channel all unhandled errors in form of Event.
-func NewWorker(ctx context.Context, eventSink func(CommandsWorker, Event), commands Commands, limit int) CommandsWorker {
-	if limit < 1 {
-		limit = 1
-	}
-
-	w := &worker{
+func NewWorker[T, U any](ctx context.Context, eventSink func(Result[U]), chain Pipeline[T, U]) Worker[T, U] {
+	w := &worker[T, U]{
 		ctx:       ctx,
 		started:   false,
 		eventSink: eventSink,
-		commands:  commands,
-		cLimit:    limit}
+		chain:     chain,
+	}
 
 	w.start()
 
 	return w
 }
 
-type worker struct {
+type worker[T, U any] struct {
 	ctx  context.Context
 	rwMu sync.RWMutex
 
 	started   bool
-	commands  Commands
-	eventPipe chan Event
-	eventSink func(CommandsWorker, Event)
-	cLimit    int
+	chain     Pipeline[T, U]
+	eventPipe chan Event[T]
+	eventSink func(Result[U])
 }
 
-func (w *worker) Handle(event Event) error {
+func (w *worker[T, U]) Handle(event Event[T]) error {
 	w.rwMu.RLock()
 	defer w.rwMu.RUnlock()
 
@@ -54,25 +48,21 @@ func (w *worker) Handle(event Event) error {
 	return nil
 }
 
-func (w *worker) IsRunning() bool {
+func (w *worker[T, U]) IsRunning() bool {
 	w.rwMu.RLock()
 	defer w.rwMu.RUnlock()
 
 	return w.started
 }
 
-func (w *worker) MarshalJSON() ([]byte, error) {
-	return json.Marshal(w.commands)
-}
-
-func (w *worker) start() {
+func (w *worker[T, U]) start() {
 	if w.started {
 		return
 	}
 
 	w.rwMu.Lock()
 
-	w.eventPipe = make(chan Event, w.cLimit)
+	w.eventPipe = make(chan Event[T])
 	w.started = true
 
 	w.rwMu.Unlock()
@@ -101,11 +91,9 @@ func (w *worker) start() {
 					ctx, cancel := context.WithCancel(w.ctx)
 
 					defer cancel()
-					w.eventSink(w, w.commands.Handle(ctx, event))
+					w.eventSink(w.chain.Handle(ctx, event))
 				}()
 			}
 		}
 	}()
 }
-
-func (w *worker) sealed() {}
