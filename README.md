@@ -1,6 +1,6 @@
 # pipelines
 
-This package is intended to help user create workflow pipelines.  
+This package helps a user create workflow pipelines.  
 
 ### To install pipelines:
 ```go
@@ -86,6 +86,8 @@ func main() {
 	}
 
 	w := pipelines.NewWorker(ctx, eventSink, c)
-	ev := w.Handle(pipelines.E[int]{P: 0})
+	err := w.Handle(pipelines.E[int]{P: 0})
+
+    // handle worker shut down error
 }
 ```

@@ -78,6 +78,8 @@
 // 	}
 //
 // 	w := pipelines.NewWorker(ctx, eventSink, c)
-// 	ev := w.Handle(pipelines.E[int]{P: 0})
+// 	err := w.Handle(pipelines.E[int]{P: 0})
+//
+// 	// handle worker shut down error
 // }
 package pipelines
