@@ -6,28 +6,23 @@ import (
 	"testing"
 
 	"github.com/andriiyaremenko/pipelines"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestCommand(t *testing.T) {
-	t.Run("Should be able to create command and handle command", testCanCreateCommand)
-	t.Run("Command should be able to chain events", testCommandHandleChainEvents)
-	t.Run("Command should handle nil", testCommandHandleNil)
-	t.Run("Command should be able to chain events and handle several events from one handler",
-		testCommandHandleChainEventsSeveralEvents)
-	t.Run("Command should be able to chain events and use registered error handlers",
-		testCommandHandleChainEventsShouldUseErrorHandlers)
-	t.Run("Command should be able to show unhandled errors in result",
-		testShouldShowErrorsInResult)
+func TestPipeline(t *testing.T) {
+	suite.Run(t, new(pipelineSuite))
 }
 
-func testCanCreateCommand(t *testing.T) {
+type pipelineSuite struct {
+	suite.Suite
+}
+
+func (suite *pipelineSuite) TestCanCreatePipeline() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler := func(ctx context.Context, _ string) (string, error) {
 		return "", nil
 	}
@@ -35,16 +30,15 @@ func testCanCreateCommand(t *testing.T) {
 		pipelines.HandlerFunc(handler),
 	)
 
-	assert.NoError(c.Handle(ctx, pipelines.E[string]{}).Err(), "no error should be returned")
+	suite.NoError(c.Handle(ctx, pipelines.E[string]{}).Err(), "no error should be returned")
 }
 
-func testCommandHandleChainEvents(t *testing.T) {
+func (suite *pipelineSuite) TestHandleChainedEvents() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 42})
@@ -58,17 +52,16 @@ func testCommandHandleChainEvents(t *testing.T) {
 	c = pipelines.Append[string, int, int](c, handler2)
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 
-	assert.NoError(ev.Err(), "no error should be returned")
-	assert.Equal([]int{84}, ev.Payload())
+	suite.NoError(ev.Err(), "no error should be returned")
+	suite.Equal([]int{84}, ev.Payload())
 }
 
-func testCommandHandleNil(t *testing.T) {
+func (suite *pipelineSuite) TestHandleNilEvent() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 42})
@@ -81,16 +74,15 @@ func testCommandHandleNil(t *testing.T) {
 	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
 
 	ev := c.Handle(ctx, nil)
-	assert.Error(ev.Err(), "error should be returned")
+	suite.Error(ev.Err(), "error should be returned")
 }
 
-func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
+func (suite *pipelineSuite) TestHandleChainedEventsWithSeveralWrites() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 1})
@@ -110,17 +102,16 @@ func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	assert.NoError(ev.Err(), "no error should be returned")
-	assert.Equal([]int{3, 3, 3, 3}, ev.Payload())
+	suite.NoError(ev.Err(), "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
 }
 
-func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
+func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 1})
@@ -148,17 +139,16 @@ func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	assert.NoError(ev.Err(), "no error should be returned")
-	assert.Equal([]int{3, 3, 3, 3}, ev.Payload())
+	suite.NoError(ev.Err(), "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
 }
 
-func testShouldShowErrorsInResult(t *testing.T) {
+func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 1})
@@ -179,5 +169,65 @@ func testShouldShowErrorsInResult(t *testing.T) {
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	assert.Error(ev.Err(), "error should be returned")
+	suite.Error(ev.Err(), "error should be returned")
+}
+
+func (suite *pipelineSuite) TestParallelWorkers() {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	handler1 := &pipelines.BaseHandler[string, int]{
+		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.E[int]{P: 1})
+		}}
+	handler2 := &pipelines.BaseHandler[int, int]{
+		NWorkers: 4,
+		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+		}}
+	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
+		return p + 1, nil
+	}
+
+	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
+	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
+
+	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
+	suite.NoError(ev.Err(), "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
+}
+
+func (suite *pipelineSuite) TestWriteNilEvent() {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	handler1 := &pipelines.BaseHandler[string, int]{
+		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.E[int]{P: 1})
+			r.Write(nil)
+			r.Write(pipelines.E[int]{P: 1})
+		}}
+	handler2 := &pipelines.BaseHandler[int, int]{
+		NWorkers: 4,
+		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+		}}
+	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
+		return p + 1, nil
+	}
+
+	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
+	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
+
+	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
+	suite.Error(ev.Err(), "error should be returned")
+	suite.Equal([]int{3, 3, 3}, ev.Payload())
 }

@@ -6,20 +6,23 @@ import (
 	"testing"
 
 	"github.com/andriiyaremenko/pipelines"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestCommandWorker(t *testing.T) {
-	t.Run("Command Worker should start and Handle commands", testWorkerShouldStartAndHandleCommands)
+func TestWorker(t *testing.T) {
+	suite.Run(t, new(workerSuite))
 }
 
-func testWorkerShouldStartAndHandleCommands(t *testing.T) {
+type workerSuite struct {
+	suite.Suite
+}
+
+func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	assert := assert.New(t)
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
 			r.Write(pipelines.E[int]{P: 1})
@@ -42,8 +45,8 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 
 	var wg sync.WaitGroup
 	eventSink := func(r pipelines.Result[int]) {
-		assert.NoError(r.Err())
-		assert.Equal([]int{3, 3, 3, 3}, r.Payload())
+		suite.NoError(r.Err())
+		suite.Equal([]int{3, 3, 3, 3}, r.Payload())
 		wg.Done()
 	}
 
@@ -53,14 +56,14 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 	go func() {
 		err := w.Handle(pipelines.E[string]{P: "start"})
 
-		assert.NoError(err, "no error should be returned")
+		suite.NoError(err, "no error should be returned")
 	}()
 
 	wg.Add(1)
 	go func() {
 		err := w.Handle(pipelines.E[string]{P: "start"})
 
-		assert.NoError(err, "no error should be returned")
+		suite.NoError(err, "no error should be returned")
 	}()
 
 	wg.Wait()
