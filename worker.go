@@ -90,8 +90,8 @@ func (w *worker[T, U]) start() {
 
 					ctx, cancel := context.WithCancel(w.ctx)
 
-					defer cancel()
 					w.eventSink(w.chain.Handle(ctx, event))
+					cancel()
 				}()
 			}
 		}

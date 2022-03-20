@@ -40,27 +40,26 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 	c = pipelines.Append[string, int, int](c, handler2)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
+	var wg sync.WaitGroup
 	eventSink := func(r pipelines.Result[int]) {
 		assert.NoError(r.Err())
 		assert.Equal([]int{3, 3, 3, 3}, r.Payload())
+		wg.Done()
 	}
 
 	w := pipelines.NewWorker(ctx, eventSink, c)
-	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
 		err := w.Handle(pipelines.E[string]{P: "start"})
+
 		assert.NoError(err, "no error should be returned")
 	}()
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
 		err := w.Handle(pipelines.E[string]{P: "start"})
+
 		assert.NoError(err, "no error should be returned")
 	}()
 
