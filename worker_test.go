@@ -2,9 +2,7 @@ package pipelines_test
 
 import (
 	"context"
-	"os"
 	"runtime"
-	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -71,13 +69,14 @@ func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 	wg.Wait()
 
 	cancel()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Millisecond * 250)
 
 	suite.False(w.IsRunning())
 
 	hangingGoroutines := runtime.NumGoroutine() - 3
 	if hangingGoroutines != 0 {
-		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
-		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+		buf := make([]byte, 1<<16)
+		runtime.Stack(buf, true)
+		suite.Failf("leaky goroutines", "%d leaky goroutines found:\n%s", hangingGoroutines, string(buf))
 	}
 }

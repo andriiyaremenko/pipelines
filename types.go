@@ -61,6 +61,6 @@ type Pipeline[T, U any] interface {
 type Worker[T, U any] interface {
 	// Asynchronously handles Event and returns error if Worker is stopped.
 	Handle(Event[T]) error
-    // returns false if Worker was stopped.
-    IsRunning() bool
+	// returns false if Worker was stopped.
+	IsRunning() bool
 }
