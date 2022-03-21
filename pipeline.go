@@ -49,14 +49,15 @@ func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[T, U
 type flow[T, U any] func(context.Context) (EventWriter[T], EventReader[U])
 
 func (spin flow[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
-	w, r := spin(ctx)
-
 	result := newResult[U](internal.TypeName[Event[T]]())
 
 	if e == nil {
 		result.AppendError(ErrNilEvent[T](fmt.Sprintf("%s.Handle failed", internal.TypeName[Pipeline[T, U]]())))
+
 		return result
 	}
+
+	w, r := spin(ctx)
 
 	w.Write(e)
 	w.Done()

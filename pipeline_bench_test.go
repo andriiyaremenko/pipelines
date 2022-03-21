@@ -2,6 +2,9 @@ package pipelines_test
 
 import (
 	"context"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"testing"
 
 	"github.com/andriiyaremenko/pipelines"
@@ -22,6 +25,13 @@ func BenchmarkSingleHandler(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = c.Handle(ctx, pipelines.E[any]{}).Err()
+	}
+
+	hangingGoroutines := runtime.NumGoroutine() - 2
+	if hangingGoroutines != 0 {
+		b.Errorf("%d leaky goroutines found", hangingGoroutines)
+		b.Fail()
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	}
 }
 
@@ -45,6 +55,13 @@ func BenchmarkChainedEvent(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = c.Handle(ctx, pipelines.E[any]{})
+	}
+
+	hangingGoroutines := runtime.NumGoroutine() - 2
+	if hangingGoroutines != 0 {
+		b.Errorf("%d leaky goroutines found", hangingGoroutines)
+		b.Fail()
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	}
 }
 
@@ -78,6 +95,13 @@ func BenchmarkSeveralWrites(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = c.Handle(ctx, pipelines.E[any]{})
 	}
+
+	hangingGoroutines := runtime.NumGoroutine() - 2
+	if hangingGoroutines != 0 {
+		b.Errorf("%d leaky goroutines found", hangingGoroutines)
+		b.Fail()
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func BenchmarkParallelWorkers(b *testing.B) {
@@ -110,5 +134,12 @@ func BenchmarkParallelWorkers(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = c.Handle(ctx, pipelines.E[any]{})
+	}
+
+	hangingGoroutines := runtime.NumGoroutine() - 2
+	if hangingGoroutines != 0 {
+		b.Errorf("%d leaky goroutines found", hangingGoroutines)
+		b.Fail()
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 	}
 }

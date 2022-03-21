@@ -3,6 +3,9 @@ package pipelines_test
 import (
 	"context"
 	"errors"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"testing"
 
 	"github.com/andriiyaremenko/pipelines"
@@ -31,6 +34,12 @@ func (suite *pipelineSuite) TestCanCreatePipeline() {
 	)
 
 	suite.NoError(c.Handle(ctx, pipelines.E[string]{}).Err(), "no error should be returned")
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestHandleChainedEvents() {
@@ -54,6 +63,12 @@ func (suite *pipelineSuite) TestHandleChainedEvents() {
 
 	suite.NoError(ev.Err(), "no error should be returned")
 	suite.Equal([]int{84}, ev.Payload())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestHandleNilEvent() {
@@ -75,6 +90,12 @@ func (suite *pipelineSuite) TestHandleNilEvent() {
 
 	ev := c.Handle(ctx, nil)
 	suite.Error(ev.Err(), "error should be returned")
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestHandleChainedEventsWithSeveralWrites() {
@@ -104,6 +125,12 @@ func (suite *pipelineSuite) TestHandleChainedEventsWithSeveralWrites() {
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 	suite.NoError(ev.Err(), "no error should be returned")
 	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
@@ -141,6 +168,12 @@ func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 	suite.NoError(ev.Err(), "no error should be returned")
 	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
@@ -170,6 +203,12 @@ func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
 
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 	suite.Error(ev.Err(), "error should be returned")
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestParallelWorkers() {
@@ -200,6 +239,12 @@ func (suite *pipelineSuite) TestParallelWorkers() {
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 	suite.NoError(ev.Err(), "no error should be returned")
 	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }
 
 func (suite *pipelineSuite) TestWriteNilEvent() {
@@ -230,4 +275,10 @@ func (suite *pipelineSuite) TestWriteNilEvent() {
 	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 	suite.Error(ev.Err(), "error should be returned")
 	suite.Equal([]int{3, 3, 3}, ev.Payload())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }

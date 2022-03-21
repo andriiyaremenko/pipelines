@@ -2,8 +2,12 @@ package pipelines_test
 
 import (
 	"context"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/andriiyaremenko/pipelines"
 	"github.com/stretchr/testify/suite"
@@ -20,8 +24,6 @@ type workerSuite struct {
 func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
-
-	defer cancel()
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
@@ -67,4 +69,15 @@ func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 	}()
 
 	wg.Wait()
+
+	cancel()
+	time.Sleep(time.Second * 1)
+
+	suite.False(w.IsRunning())
+
+	hangingGoroutines := runtime.NumGoroutine() - 3
+	if hangingGoroutines != 0 {
+		suite.Failf("leaky goroutines", "%d leaky goroutines found", hangingGoroutines)
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+	}
 }

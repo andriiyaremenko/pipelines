@@ -69,18 +69,29 @@ func (w *worker[T, U]) start() {
 
 	go func() {
 		var wg sync.WaitGroup
+		shutdown := func() {
+			w.rwMu.Lock()
+
+			wg.Wait()
+
+			w.started = false
+			close(w.eventPipe)
+
+			w.rwMu.Unlock()
+		}
 
 		for {
 			select {
 			case <-w.ctx.Done():
-				w.rwMu.Lock()
+				shutdown()
 
-				wg.Wait()
+				return
+			default:
+			}
 
-				w.started = false
-				close(w.eventPipe)
-
-				w.rwMu.Unlock()
+			select {
+			case <-w.ctx.Done():
+				shutdown()
 
 				return
 			case event := <-w.eventPipe:
