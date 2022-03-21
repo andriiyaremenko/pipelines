@@ -9,6 +9,8 @@ import (
 )
 
 var (
+	_ Event[any] = new(Err[any])
+	_ error      = new(Err[any])
 	_ Event[any] = new(ErrEvent[any])
 	_ error      = new(ErrEvent[any])
 	_ Event[any] = new(ErrHandlerEvent[any])
@@ -16,19 +18,50 @@ var (
 	_ error      = new(ErrAggregated)
 )
 
-// Returns new *ErrEvent[T] caused by event.
-// *ErrEvent implements error and Event[T].
-func NewErrEvent[T any](err error) *ErrEvent[T] {
-	return &ErrEvent[T]{err}
+// Returns new *Err[T] caused by event.
+// *Err[T] implements error and Event[T].
+func NewErr[T any](err error) *Err[T] {
+	return &Err[T]{err}
 }
 
-type ErrEvent[T any] struct {
+type Err[T any] struct {
 	cause error
 }
 
 // Returns zero value of type T.
-func (err *ErrEvent[T]) Payload() T {
+func (err *Err[T]) Payload() T {
 	return internal.ZeroValue[T]()
+}
+
+// Returns the underlying error.
+func (err *Err[T]) Err() error {
+	return err.cause
+}
+
+// Implementation of error.
+func (err *Err[T]) Error() string {
+	return err.cause.Error()
+}
+
+// Returns underlying error.
+func (err *Err[T]) Unwrap() error {
+	return err.cause
+}
+
+// Returns new *ErrEvent[T] caused by event.
+// *Err[T] implements error and Event[T].
+func NewErrEvent[T any](payload T, err error) *ErrEvent[T] {
+	return &ErrEvent[T]{err, payload}
+}
+
+type ErrEvent[T any] struct {
+	cause   error
+	payload T
+}
+
+// Returns event payload.
+func (err *ErrEvent[T]) Payload() T {
+	return err.payload
 }
 
 // Returns the underlying error.
@@ -37,7 +70,7 @@ func (err *ErrEvent[T]) Err() error {
 }
 
 // Implementation of error.
-func (err *ErrEvent[T]) Error() string {
+func (err *ErrEvent[EventT]) Error() string {
 	return err.cause.Error()
 }
 

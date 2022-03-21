@@ -88,6 +88,6 @@ func main() {
 	w := pipelines.NewWorker(ctx, eventSink, c)
 	err := w.Handle(pipelines.E[int]{P: 0})
 
-    // handle worker shut down error
+	// handle worker shut down error
 }
 ```

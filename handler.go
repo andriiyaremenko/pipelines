@@ -64,7 +64,7 @@ func (handlerFunc[T, U]) Workers() int {
 type defaultErrorHandler[T, U any] struct{}
 
 func (h *defaultErrorHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
-	w.Write(NewErrEvent[U](event.Err()))
+	w.Write(NewErr[U](event.Err()))
 }
 
 func (h *defaultErrorHandler[T, U]) Workers() int {
