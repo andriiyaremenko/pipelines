@@ -14,5 +14,9 @@ func TypeName[T any]() string {
 
 func InstanceTypeName(instance any) string {
 	t := reflect.TypeOf(instance)
+	if t.Kind() == reflect.Pointer {
+		return t.Elem().Name()
+	}
+
 	return t.Name()
 }
