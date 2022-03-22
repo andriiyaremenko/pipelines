@@ -138,7 +138,7 @@ func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
 			r.Write(pipelines.E[int]{P: 1})
 			r.Write(pipelines.E[int]{P: 1})
 			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.NewErrHandlerEvent[int]("FirstHandler", errors.New("some error")))
+			r.Write(pipelines.NewErr[int](errors.New("some error")))
 			r.Write(pipelines.E[int]{P: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
@@ -177,7 +177,7 @@ func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
 			r.Write(pipelines.E[int]{P: 1})
 			r.Write(pipelines.E[int]{P: 1})
 			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.NewErrHandlerEvent[int]("FirstHandler", errors.New("some error")))
+			r.Write(pipelines.NewErr[int](errors.New("some error")))
 			r.Write(pipelines.E[int]{P: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{

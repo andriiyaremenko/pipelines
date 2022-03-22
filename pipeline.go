@@ -91,7 +91,7 @@ func startWorkers[T, U any](ctx context.Context, handler ErrorHandler[T, U], r E
 		go func() {
 			for event := range r.Read() {
 				if event == nil {
-					err := ErrNilEvent[T](fmt.Sprintf("%s.Handle failed", internal.TypeName[Pipeline[T, U]]()))
+					err := ErrNilEvent[T]("bad event")
 					handler.HandleError(ctx, w, NewErrHandlerEvent[T](handler, err))
 
 					continue

@@ -2,8 +2,6 @@ package pipelines
 
 import (
 	"context"
-
-	"github.com/andriiyaremenko/pipelines/internal"
 )
 
 var _ Handler[any, any] = new(BaseHandler[any, any])
@@ -18,7 +16,7 @@ type BaseHandler[T, U any] struct {
 func (ch *BaseHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
 	select {
 	case <-ctx.Done():
-		w.Write(NewErrHandlerEvent[U](internal.InstanceTypeName(ch), ctx.Err()))
+		w.Write(NewErrHandlerEvent[U](ch, ctx.Err()))
 
 		return
 	default:
@@ -41,13 +39,13 @@ type handlerFunc[T, U any] func(context.Context, T) (U, error)
 func (handle handlerFunc[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
 	select {
 	case <-ctx.Done():
-		w.Write(NewErrHandlerEvent[U](internal.InstanceTypeName(handle), ctx.Err()))
+		w.Write(NewErrHandlerEvent[U](handle, ctx.Err()))
 
 		return
 	default:
 		v, err := handle(ctx, event.Payload())
 		if err != nil {
-			w.Write(NewErrHandlerEvent[U](internal.InstanceTypeName(handle), err))
+			w.Write(NewErrHandlerEvent[U](handle, err))
 
 			return
 		}
