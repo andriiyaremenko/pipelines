@@ -9,14 +9,10 @@ func ZeroValue[T any]() T {
 
 func TypeName[T any]() string {
 	t := reflect.TypeOf((*T)(nil))
-	return t.Elem().Name()
+	return t.Elem().String()
 }
 
 func InstanceTypeName(instance any) string {
 	t := reflect.TypeOf(instance)
-	if t.Kind() == reflect.Pointer {
-		return t.Elem().Name()
-	}
-
-	return t.Name()
+	return t.String()
 }

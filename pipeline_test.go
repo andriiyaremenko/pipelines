@@ -3,52 +3,40 @@ package pipelines_test
 import (
 	"context"
 	"errors"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/andriiyaremenko/pipelines"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/goleak"
 )
 
 func TestPipeline(t *testing.T) {
-	suite.Run(t, new(pipelineSuite))
+	t.Run("CanCreatePipeline", CanCreatePipeline)
+	t.Run("HandleChainedEvents", HandleChainedEvents)
+	t.Run("HandleChainedEventsWithSeveralWrites", HandleChainedEventsWithSeveralWrites)
+	t.Run("ShouldUseErrorHandlers", ShouldUseErrorHandlers)
+	t.Run("ShouldShowErrorsInResult", ShouldShowErrorsInResult)
+	t.Run("ParallelWorkers", ParallelWorkers)
+	t.Run("GoroutinesLeaking", GoroutinesLeaking)
 }
 
-type pipelineSuite struct {
-	suite.Suite
-}
+func CanCreatePipeline(t *testing.T) {
+	suite := assert.New(t)
 
-func (suite *pipelineSuite) checkIfAnyGoroutinesLeaking() {
-	time.Sleep(time.Millisecond * 250)
-
-	hangingGoroutines := runtime.NumGoroutine() - 3
-	if hangingGoroutines != 0 {
-		buf := make([]byte, 1<<16)
-		runtime.Stack(buf, true)
-		suite.Failf("leaky goroutines", "%d leaky goroutines found:\n%s", hangingGoroutines, string(buf))
-	}
-}
-
-func (suite *pipelineSuite) TestCanCreatePipeline() {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	handler := func(ctx context.Context, _ string) (string, error) {
-		return "", nil
-	}
-	c := pipelines.New(
-		pipelines.HandlerFunc(handler),
-	)
+	handler := func(context.Context, string) (string, error) { return "", nil }
+	c := pipelines.New(pipelines.HandlerFunc(handler))
 
-	suite.NoError(c.Handle(ctx, pipelines.E[string]{}).Err(), "no error should be returned")
-
-	suite.checkIfAnyGoroutinesLeaking()
+	suite.NoError(pipelines.FirstError(c.Handle(ctx, pipelines.Event[string]{})), "no error should be returned")
 }
 
-func (suite *pipelineSuite) TestHandleChainedEvents() {
+func HandleChainedEvents(t *testing.T) {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -56,24 +44,28 @@ func (suite *pipelineSuite) TestHandleChainedEvents() {
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 42})
+			r.Write(pipelines.Event[int]{Payload: 42})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 42 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
 		}}
-
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
 
-	suite.NoError(ev.Err(), "no error should be returned")
-	suite.Equal([]int{84}, ev.Payload())
+	value, err := pipelines.Reduce(
+		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		pipelines.NoError(func(prev, next int) int { return prev + next }),
+		0,
+	)
 
-	suite.checkIfAnyGoroutinesLeaking()
+	suite.NoError(err, "no error should be returned")
+	suite.Equal(84, value)
 }
 
-func (suite *pipelineSuite) TestHandleNilEvent() {
+func HandleChainedEventsWithSeveralWrites(t *testing.T) {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -81,53 +73,33 @@ func (suite *pipelineSuite) TestHandleNilEvent() {
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 42})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 42 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
-
-	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
-
-	ev := c.Handle(ctx, nil)
-	suite.Error(ev.Err(), "error should be returned")
-
-	suite.checkIfAnyGoroutinesLeaking()
-}
-
-func (suite *pipelineSuite) TestHandleChainedEventsWithSeveralWrites() {
-	ctx := context.TODO()
-	ctx, cancel := context.WithCancel(ctx)
-
-	defer cancel()
-
-	handler1 := &pipelines.BaseHandler[string, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-		}}
-	handler2 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
-		}}
-
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
 	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	suite.NoError(ev.Err(), "no error should be returned")
-	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
-
-	suite.checkIfAnyGoroutinesLeaking()
+	value, err := pipelines.Reduce(
+		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
+		[]int{},
+	)
+	suite.NoError(err, "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, value)
 }
 
-func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
+func ShouldUseErrorHandlers(t *testing.T) {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -135,21 +107,20 @@ func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.NewErr[int](errors.New("some error")))
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
 
 	handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 		return 1 + n, nil
 	}
-
 	handlerErr := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {},
 	}
@@ -159,14 +130,18 @@ func (suite *pipelineSuite) TestShouldUseErrorHandlers() {
 	)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	suite.NoError(ev.Err(), "no error should be returned")
-	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
-
-	suite.checkIfAnyGoroutinesLeaking()
+	value, err := pipelines.Reduce(
+		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
+		[]int{},
+	)
+	suite.NoError(err, "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, value)
 }
 
-func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
+func ShouldShowErrorsInResult(t *testing.T) {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -174,30 +149,28 @@ func (suite *pipelineSuite) TestShouldShowErrorsInResult() {
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.NewErr[int](errors.New("some error")))
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
-
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
 	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	suite.Error(ev.Err(), "error should be returned")
-
-	suite.checkIfAnyGoroutinesLeaking()
+	suite.Error(pipelines.FirstError(c.Handle(ctx, pipelines.Event[string]{Payload: "start"})), "error should be returned")
 }
 
-func (suite *pipelineSuite) TestParallelWorkers() {
+func ParallelWorkers(t *testing.T) {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -205,58 +178,69 @@ func (suite *pipelineSuite) TestParallelWorkers() {
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		NWorkers: 4,
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
-
 	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	suite.NoError(ev.Err(), "no error should be returned")
-	suite.Equal([]int{3, 3, 3, 3}, ev.Payload())
-
-	suite.checkIfAnyGoroutinesLeaking()
+	value, err := pipelines.Reduce(
+		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
+		[]int{},
+	)
+	suite.NoError(err, "no error should be returned")
+	suite.Equal([]int{3, 3, 3, 3}, value)
 }
 
-func (suite *pipelineSuite) TestWriteNilEvent() {
+func GoroutinesLeaking(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
 	handler1 := &pipelines.BaseHandler[string, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(nil)
-			r.Write(pipelines.E[int]{P: 1})
+		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.NewErr[int](errors.New("some error")))
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
-		NWorkers: 4,
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
-
 	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
-	ev := c.Handle(ctx, pipelines.E[string]{P: "start"})
-	suite.Error(ev.Err(), "error should be returned")
-	suite.Equal([]int{3, 3, 3}, ev.Payload())
-
-	suite.checkIfAnyGoroutinesLeaking()
+	for i := 10; i > 0; i-- {
+		_, _ = pipelines.Reduce(
+			c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+			pipelines.NoError(func(sum, next int) int { return sum + next }),
+			0,
+		)
+		_, _ = pipelines.Reduce(
+			c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+			pipelines.SkipErrors(func(sum, next int) int { return sum + next }, func(error) {}),
+			0,
+		)
+		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[string]{Payload: "start"}))
+		_ = pipelines.Errors(c.Handle(ctx, pipelines.Event[string]{Payload: "start"}))
+	}
 }

@@ -2,39 +2,38 @@ package pipelines_test
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/andriiyaremenko/pipelines"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/goleak"
 )
 
 func TestWorker(t *testing.T) {
-	suite.Run(t, new(workerSuite))
+	t.Run("ShouldStartAndHandleEvents", WorkerShouldStartAndHandleEvents)
 }
 
-type workerSuite struct {
-	suite.Suite
-}
+func WorkerShouldStartAndHandleEvents(t *testing.T) {
+	defer goleak.VerifyNone(t)
 
-func (suite *workerSuite) TestShouldStartAndHandleEvents() {
+	suite := assert.New(t)
+
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
 	handler1 := &pipelines.BaseHandler[string, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
-			r.Write(pipelines.E[int]{P: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 1 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
 		}}
-
 	handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 		return 1 + n, nil
 	}
@@ -45,8 +44,14 @@ func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 
 	var wg sync.WaitGroup
 	eventSink := func(r pipelines.Result[int]) {
-		suite.NoError(r.Err())
-		suite.Equal([]int{3, 3, 3, 3}, r.Payload())
+		value, err := pipelines.Reduce(
+			r,
+			pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
+			[]int{},
+		)
+
+		suite.NoError(err)
+		suite.Equal([]int{3, 3, 3, 3}, value)
 		wg.Done()
 	}
 
@@ -54,29 +59,21 @@ func (suite *workerSuite) TestShouldStartAndHandleEvents() {
 
 	wg.Add(1)
 	go func() {
-		err := w.Handle(pipelines.E[string]{P: "start"})
+		err := w.Handle(pipelines.Event[string]{Payload: "start"})
 
 		suite.NoError(err, "no error should be returned")
 	}()
 
 	wg.Add(1)
 	go func() {
-		err := w.Handle(pipelines.E[string]{P: "start"})
+		err := w.Handle(pipelines.Event[string]{Payload: "start"})
 
 		suite.NoError(err, "no error should be returned")
 	}()
 
 	wg.Wait()
-
 	cancel()
+
 	time.Sleep(time.Millisecond * 250)
-
 	suite.False(w.IsRunning())
-
-	hangingGoroutines := runtime.NumGoroutine() - 3
-	if hangingGoroutines != 0 {
-		buf := make([]byte, 1<<16)
-		runtime.Stack(buf, true)
-		suite.Failf("leaky goroutines", "%d leaky goroutines found:\n%s", hangingGoroutines, string(buf))
-	}
 }

@@ -21,29 +21,28 @@ func main() {
 
 	handler1 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 42})
+			r.Write(pipelines.Event[int]{Payload: 42})
 		}}
 	handler2 := &pipelines.BaseHandler[int, int]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 42 + e.Payload()})
+			r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
 		}}
 
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	ev := c.Handle(ctx, pipelines.E[int]{P: 0})
+	v, err := pipelines.Reduce(
+		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		pipelines.NoError(func(sum, next int) int { return sum + next }),
+		0,
+	)
 
 	// handle error
-	if err := ev.Err(); err != nil {
+	if err != nil {
 		// ...
 	}
 
-	// or every underlying error separately:
-	for _, err := range ev.Errors() {
-		// ...
-	}
-
-	// use result:
-	elements := ev.Payload()
+	// use result v:
+	// ...
 }
 ```
 
@@ -70,24 +69,28 @@ func main() {
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
 
-	eventSink := func(ev pipelines.Result[int]) {
+	eventSink := func(r pipelines.Result[int]) {
+		v, err := pipelines.Reduce(
+			r,
+			pipelines.NoError(func(sum, next int) int { return sum + next }),
+			0,
+		)
+
 		// handle error
-		if err := ev.Err(); err != nil {
+		if err != nil {
 			// ...
 		}
 
-		// or every underlying error separately:
-		for _, err := range ev.Errors() {
-			// ...
-		}
-
-		// use result:
-		elements := ev.Payload()
+		// use result v:
+		// ...
 	}
 
 	w := pipelines.NewWorker(ctx, eventSink, c)
 	err := w.Handle(pipelines.E[int]{P: 0})
 
 	// handle worker shut down error
+	if err != nil {
+		// ...
+	}
 }
 ```

@@ -2,12 +2,9 @@ package pipelines
 
 import (
 	"context"
-	"fmt"
-
-	"github.com/andriiyaremenko/pipelines/internal"
 )
 
-// Adds next Handler to the Pipeline.
+// Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
 func Append[T, U, H any](c Pipeline[T, U], h Handler[U, H]) Pipeline[T, H] {
 	return flow[T, H](
 		func(ctx context.Context) (EventWriter[T], EventReader[H]) {
@@ -23,7 +20,7 @@ func Append[T, U, H any](c Pipeline[T, U], h Handler[U, H]) Pipeline[T, H] {
 	)
 }
 
-// Creates new Pipeline.
+// Creates new Pipeline[T, U].
 func New[T, U any](h Handler[T, U]) Pipeline[T, U] {
 	return flow[T, U](
 		func(ctx context.Context) (EventWriter[T], EventReader[U]) {
@@ -41,35 +38,16 @@ func New[T, U any](h Handler[T, U]) Pipeline[T, U] {
 	)
 }
 
-// Combines two handlers to handle events and errors of the same event type.
-func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[T, U]) ErrorHandler[T, U] {
-	return &errHandler[T, U]{handler: handler, errorHandler: errorHandler}
-}
-
 type flow[T, U any] func(context.Context) (EventWriter[T], EventReader[U])
 
 func (spin flow[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
-	result := newResult[U](internal.TypeName[Event[T]]())
-
-	if e == nil {
-		result.AppendError(ErrNilEvent[T](fmt.Sprintf("%s.Handle failed", internal.TypeName[Pipeline[T, U]]())))
-
-		return result
-	}
-
+	ctx, cancel := context.WithCancel(ctx)
 	w, r := spin(ctx)
+
+	result := newResult(r.Read(), cancel)
 
 	w.Write(e)
 	w.Done()
-
-	for ev := range r.Read() {
-		if err := ev.Err(); err != nil {
-			result.AppendError(err)
-			continue
-		}
-
-		result.Append(ev)
-	}
 
 	return result
 }
@@ -90,15 +68,7 @@ func startWorkers[T, U any](ctx context.Context, handler ErrorHandler[T, U], r E
 		w := rw.GetWriter()
 		go func() {
 			for event := range r.Read() {
-				if event == nil {
-					err := ErrNilEvent[T]("bad event")
-					handler.HandleError(ctx, w, NewErrHandlerEvent[T](handler, err))
-
-					continue
-				}
-
-				err := event.Err()
-				if err != nil {
+				if event.Err != nil {
 					handler.HandleError(ctx, w, event)
 					continue
 				}

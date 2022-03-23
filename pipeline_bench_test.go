@@ -21,7 +21,7 @@ func BenchmarkSingleHandler(b *testing.B) {
 	)
 
 	for i := 0; i < b.N; i++ {
-		_ = c.Handle(ctx, pipelines.E[any]{}).Err()
+		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
 	}
 }
 
@@ -33,18 +33,18 @@ func BenchmarkChainedEvent(b *testing.B) {
 
 	handler1 := &pipelines.BaseHandler[any, any]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 	handler2 := &pipelines.BaseHandler[any, any]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], e pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 
 	c := pipelines.New[any, any](handler1)
 	c = pipelines.Append[any, any, any](c, handler2)
 
 	for i := 0; i < b.N; i++ {
-		_ = c.Handle(ctx, pipelines.E[any]{})
+		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
 	}
 }
 
@@ -56,17 +56,17 @@ func BenchmarkSeveralWrites(b *testing.B) {
 
 	handler1 := &pipelines.BaseHandler[any, any]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 	handler2 := &pipelines.BaseHandler[any, any]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 	handlerFunc3 := func(ctx context.Context, _ any) (any, error) {
 		return nil, nil
@@ -76,7 +76,7 @@ func BenchmarkSeveralWrites(b *testing.B) {
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
-		_ = c.Handle(ctx, pipelines.E[any]{})
+		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
 	}
 }
 
@@ -88,18 +88,18 @@ func BenchmarkParallelWorkers(b *testing.B) {
 
 	handler1 := &pipelines.BaseHandler[any, any]{
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 	handler2 := &pipelines.BaseHandler[any, any]{
 		NWorkers: 4,
 		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
-			r.Write(pipelines.E[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
+			r.Write(pipelines.Event[any]{})
 		}}
 	handlerFunc3 := func(ctx context.Context, _ any) (any, error) {
 		return nil, nil
@@ -109,6 +109,6 @@ func BenchmarkParallelWorkers(b *testing.B) {
 	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
-		_ = c.Handle(ctx, pipelines.E[any]{})
+		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
 	}
 }

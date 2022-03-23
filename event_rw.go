@@ -72,7 +72,7 @@ func (r *eventW[T]) Write(e Event[T]) {
 }
 
 func (r *eventW[T]) Done() {
-	r.once.Do(func() {
+	go r.once.Do(func() {
 		r.writeWG.Wait()
 		r.rwMu.Lock()
 

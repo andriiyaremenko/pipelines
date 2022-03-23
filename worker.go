@@ -10,14 +10,14 @@ var (
 	WorkerStopped = errors.New("command worker is stopped")
 )
 
-// Returns CommandWorker based on Commands.
-// eventSink is used to channel all unhandled errors in form of Event.
-func NewWorker[T, U any](ctx context.Context, eventSink func(Result[U]), chain Pipeline[T, U]) Worker[T, U] {
+// Returns Worker based on Pipeline[T, U].
+// eventSink is used to process the Result[U] of execution.
+func NewWorker[T, U any](ctx context.Context, eventSink func(Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
 	w := &worker[T, U]{
 		ctx:       ctx,
 		started:   false,
 		eventSink: eventSink,
-		chain:     chain,
+		pipeline:  pipeline,
 	}
 
 	w.start()
@@ -29,10 +29,10 @@ type worker[T, U any] struct {
 	ctx  context.Context
 	rwMu sync.RWMutex
 
-	started   bool
-	chain     Pipeline[T, U]
+	pipeline  Pipeline[T, U]
 	eventPipe chan Event[T]
 	eventSink func(Result[U])
+	started   bool
 }
 
 func (w *worker[T, U]) Handle(event Event[T]) error {
@@ -101,7 +101,7 @@ func (w *worker[T, U]) start() {
 
 					ctx, cancel := context.WithCancel(w.ctx)
 
-					w.eventSink(w.chain.Handle(ctx, event))
+					w.eventSink(w.pipeline.Handle(ctx, event))
 					cancel()
 				}()
 			}

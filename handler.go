@@ -6,13 +6,19 @@ import (
 
 var _ Handler[any, any] = new(BaseHandler[any, any])
 
-// *BaseHandler implements Handler.
-type BaseHandler[T, U any] struct {
-	HandleFunc func(ctx context.Context, w EventWriter[U], e Event[T])
-	NWorkers   int
+// Combines two handlers to handle events and errors of the same event type.
+func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[T, U]) ErrorHandler[T, U] {
+	return &errHandler[T, U]{handler: handler, errorHandler: errorHandler}
 }
 
-// Runs HandleFunc.
+// *BaseHandler implements Handler[T, U].
+type BaseHandler[T, U any] struct {
+	// Function that should be executed in Handle().
+	HandleFunc func(ctx context.Context, w EventWriter[U], e Event[T])
+	// Number of concurrent workers to run.
+	NWorkers int
+}
+
 func (ch *BaseHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
 	select {
 	case <-ctx.Done():
@@ -28,8 +34,7 @@ func (ch *BaseHandler[T, U]) Workers() int {
 	return ch.NWorkers
 }
 
-// Returns Handler with EventType equals eventType.
-// and Handle based on handle.
+// Returns Handler[T, U].
 func HandlerFunc[T, U any](handle func(context.Context, T) (U, error)) Handler[T, U] {
 	return handlerFunc[T, U](handle)
 }
@@ -43,14 +48,14 @@ func (handle handlerFunc[T, U]) Handle(ctx context.Context, w EventWriter[U], ev
 
 		return
 	default:
-		v, err := handle(ctx, event.Payload())
+		v, err := handle(ctx, event.Payload)
 		if err != nil {
 			w.Write(NewErrHandlerEvent[U](handle, err))
 
 			return
 		}
 
-		w.Write(E[U]{P: v})
+		w.Write(Event[U]{Payload: v})
 		return
 	}
 }
@@ -62,7 +67,7 @@ func (handlerFunc[T, U]) Workers() int {
 type defaultErrorHandler[T, U any] struct{}
 
 func (h *defaultErrorHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
-	w.Write(NewErr[U](event.Err()))
+	w.Write(NewErr[U](event.Err))
 }
 
 func (h *defaultErrorHandler[T, U]) Workers() int {

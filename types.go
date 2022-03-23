@@ -2,23 +2,26 @@ package pipelines
 
 import "context"
 
-// Event carries information needed to execute Commands.Handle and Commands.HandleOnly.
-type Event[T any] interface {
-	// Information needed to process Event or returned by executing Event.
-	Payload() T
-	// Error caused by executing Event.
-	Err() error
+// Event carries information needed used in Pipeline execution.
+type Event[T any] struct {
+	Payload T
+	Err     error
 }
 
+// Result returned by executing Pipeline
 type Result[T any] interface {
-	Event[[]T]
+	// Returns Event[T] channel to read events returned by executing Pipeline.
+	Events() <-chan Event[T]
 
-	Errors() []error
+	// Terminates reading of the events.
+	// Might take time to execute.
+	// Should be called inside the same goroutine with Events().
+	Close()
 }
 
 // Serves to pass Events to Handlers.
 type EventReader[T any] interface {
-	// Returns EventWithMetadata channel.
+	// Returns Event[T] channel.
 	Read() <-chan Event[T]
 
 	// Returns EventWriter instance on which this EventReader is based.
@@ -26,11 +29,11 @@ type EventReader[T any] interface {
 }
 
 // Serves to write Events in Handle.Handle to chain Events.
-// Do NOT forget to call Done() when finished writing.
 type EventWriter[T any] interface {
 	// Writes Event to a channel.
 	Write(e Event[T])
-	// Signals Commands that Handler is done writing.
+	// Signals that no more writes are expected.
+	// For internal use only!
 	Done()
 }
 
