@@ -57,7 +57,7 @@ type Pipeline[T, U any] interface {
 	// Handles initial Event and returns result of Pipeline execution.
 	Handle(context.Context, Event[T]) Result[U]
 	// Starts workers to handle incoming Event.
-	Spin(context.Context) (EventWriter[T], EventReader[U])
+	Spin(context.Context, int) (EventWriter[T], EventReader[U])
 }
 
 // Asynchronous Pipeline

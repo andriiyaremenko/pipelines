@@ -4,9 +4,9 @@ import (
 	"sync"
 )
 
-func newEventRW[T any]() EventReader[T] {
+func newEventRW[T any](readers int) EventReader[T] {
 	rw := &eventRW[T]{
-		eventsChannel: make(chan Event[T], 1),
+		eventsChannel: make(chan Event[T], readers),
 	}
 
 	return rw
