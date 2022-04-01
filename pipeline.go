@@ -14,13 +14,14 @@ type Pipeline[T, U any] interface {
 
 // Pipeline handlers constraint.
 type PipelineHandlers[T, U any] interface {
-	Handle[T, U] | HandleFunc[T, U] | HandlerOption[T, U] |
-		func(context.Context, EventWriter[U], Event[T]) | func(context.Context, T) (U, error)
+	Handler[T, U] | HandlerOption[T, U] |
+		func(context.Context, EventWriter[U], Event[T])
 }
 
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
 func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeline[T, N] {
 	handler, errHandler, workers := expandOptions[U, N](h)
+	handler = wrapHandle(handler)
 
 	return flow[T, N](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
@@ -34,6 +35,7 @@ func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeli
 // Creates new Pipeline[T, U].
 func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
 	handler, errHandler, workers := expandOptions[T, U](h)
+	handler = wrapHandle(handler)
 
 	return flow[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
@@ -65,7 +67,7 @@ func (spin flow[T, U]) Spin(ctx context.Context, readers int) (EventWriter[T], E
 
 func startWorkers[T, U any](
 	ctx context.Context,
-	handler, errorHandler Handler[T, U],
+	handle, handleError Handler[T, U],
 	r EventReader[T],
 	readers, workers int,
 ) EventReader[U] {
@@ -80,11 +82,11 @@ func startWorkers[T, U any](
 		go func() {
 			for event := range r.Read() {
 				if event.Err != nil {
-					errorHandler.Handle(ctx, w, event)
+					handleError(ctx, w, event)
 					continue
 				}
 
-				handler.Handle(ctx, w, event)
+				handle(ctx, w, event)
 			}
 			w.Done()
 		}()
@@ -94,19 +96,14 @@ func startWorkers[T, U any](
 }
 
 func expandOptions[T, U any](v any) (Handler[T, U], Handler[T, U], int) {
-	handle, ok := v.(func(context.Context, EventWriter[U], Event[T]))
-	if ok {
-		return Handle[T, U](handle), defaultErrorHandler[T, U](), 0
-	}
-
-	handleFunc, ok := v.(func(context.Context, T) (U, error))
-	if ok {
-		return HandleFunc[T, U](handleFunc), defaultErrorHandler[T, U](), 0
-	}
-
 	opts, ok := v.(HandlerOption[T, U])
 	if ok {
 		return opts()
+	}
+
+	handle, ok := v.(func(context.Context, EventWriter[U], Event[T]))
+	if ok {
+		return handle, defaultErrorHandler[T, U](), 0
 	}
 
 	return v.(Handler[T, U]), defaultErrorHandler[T, U](), 0

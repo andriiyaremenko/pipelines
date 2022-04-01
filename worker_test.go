@@ -38,7 +38,7 @@ func WorkerShouldStartAndHandleEvents(t *testing.T) {
 
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	var wg sync.WaitGroup
 	eventSink := func(r pipelines.Result[int]) {

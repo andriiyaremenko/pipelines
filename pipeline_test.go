@@ -29,7 +29,7 @@ func CanCreatePipeline(t *testing.T) {
 	defer cancel()
 
 	handler := func(context.Context, string) (string, error) { return "", nil }
-	c := pipelines.New[string, string](handler)
+	c := pipelines.New[string, string](pipelines.HandleFunc(handler))
 
 	suite.NoError(pipelines.FirstError(c.Handle(ctx, pipelines.Event[string]{})), "no error should be returned")
 }
@@ -42,14 +42,12 @@ func HandleChainedEvents(t *testing.T) {
 
 	defer cancel()
 
-	handler1 := pipelines.Handle[string, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.Event[int]{Payload: 42})
-		})
-	handler2 := pipelines.Handle[int, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
-		})
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+		r.Write(pipelines.Event[int]{Payload: 42})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+		r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
+	}
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
 
@@ -71,23 +69,21 @@ func HandleChainedEventsWithSeveralWrites(t *testing.T) {
 
 	defer cancel()
 
-	handler1 := pipelines.Handle[string, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-		})
-	handler2 := pipelines.Handle[int, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
-		})
-	handlerFunc3 := pipelines.HandleFunc[int, int](
-		func(ctx context.Context, p int) (int, error) {
-			return p + 1, nil
-		})
-	c := pipelines.Append[string, int, int](pipelines.New[string, int](handler1), handler2)
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+		r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
+	}
+	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
+		return p + 1, nil
+	}
+	c := pipelines.New[string, int](handler1)
+	c = pipelines.Append[string, int, int](c, handler2)
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	value, err := pipelines.Reduce(
 		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
@@ -106,30 +102,27 @@ func ShouldUseErrorHandlers(t *testing.T) {
 
 	defer cancel()
 
-	handler1 := pipelines.Handle[string, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErr[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
-		})
-	handler2 := pipelines.Handle[int, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
-		})
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[string]) {
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.NewErr[int](errors.New("some error")))
+		r.Write(pipelines.Event[int]{Payload: 1})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+		r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
+	}
 
 	handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 		return 1 + n, nil
 	}
-	handlerErr := pipelines.Handle[int, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {},
-	)
+	handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {}
+
 	c := pipelines.Append[string, int, int](
 		pipelines.New[string, int](handler1),
-		pipelines.WithErrorHandler[int, int](handler2, handlerErr),
+		pipelines.WithErrorHandler(handler2, handlerErr),
 	)
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	value, err := pipelines.Reduce(
 		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
@@ -163,7 +156,7 @@ func ShouldShowErrorsInResult(t *testing.T) {
 	}
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	suite.Error(pipelines.FirstError(c.Handle(ctx, pipelines.Event[string]{Payload: "start"})), "error should be returned")
 }
@@ -182,16 +175,15 @@ func ParallelWorkers(t *testing.T) {
 		r.Write(pipelines.Event[int]{Payload: 1})
 		r.Write(pipelines.Event[int]{Payload: 1})
 	}
-	handler2 := pipelines.Handle[int, int](
-		func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
-		})
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+		r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
+	}
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
 	c := pipelines.New[string, int](handler1)
-	c = pipelines.Append[string, int, int](c, pipelines.WithWorkerPool[int, int](handler2, 4))
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	c = pipelines.Append[string, int, int](c, pipelines.WithWorkerPool(handler2, 4))
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	value, err := pipelines.Reduce(
 		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
@@ -225,7 +217,7 @@ func GoroutinesLeaking(t *testing.T) {
 	}
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	c = pipelines.Append[string, int, int](c, handlerFunc3)
+	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 10; i > 0; i-- {
 		_, _ = pipelines.Reduce(
