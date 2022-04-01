@@ -12,7 +12,7 @@ type Pipeline[T, U any] interface {
 	Spin(context.Context, int) (EventWriter[T], EventReader[U])
 }
 
-// Pipline handlers constraint.
+// Pipeline handlers constraint.
 type PipelineHandlers[T, U any] interface {
 	Handle[T, U] | HandleFunc[T, U] | HandlerOption[T, U] |
 		func(context.Context, EventWriter[U], Event[T]) | func(context.Context, T) (U, error)
