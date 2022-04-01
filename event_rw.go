@@ -4,6 +4,24 @@ import (
 	"sync"
 )
 
+// Serves to pass Events to Handlers.
+type EventReader[T any] interface {
+	// Returns Event[T] channel.
+	Read() <-chan Event[T]
+
+	// Returns EventWriter instance on which this EventReader is based.
+	GetWriter() EventWriter[T]
+}
+
+// Serves to write Events in Handle.Handle to chain Events.
+type EventWriter[T any] interface {
+	// Writes Event to a channel.
+	Write(e Event[T])
+	// Signals that no more writes are expected.
+	// For internal use only!
+	Done()
+}
+
 func newEventRW[T any](readers int) EventReader[T] {
 	rw := &eventRW[T]{
 		eventsChannel: make(chan Event[T], readers),

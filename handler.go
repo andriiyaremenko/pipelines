@@ -4,44 +4,62 @@ import (
 	"context"
 )
 
-var _ Handler[any, any] = new(BaseHandler[any, any])
+var (
+	_ Handler[any, any] = Handle[any, any](nil)
+	_ Handler[any, any] = HandleFunc[any, any](nil)
+)
 
-// Combines two handlers to handle events and errors of the same event type.
-func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[T, U]) ErrorHandler[T, U] {
-	return &errHandler[T, U]{handler: handler, errorHandler: errorHandler}
+// Handles single type of Event.
+type Handler[T, U any] interface {
+	// Method to handle Events.
+	Handle(ctx context.Context, w EventWriter[U], event Event[T])
 }
 
-// *BaseHandler implements Handler[T, U].
-type BaseHandler[T, U any] struct {
-	// Function that should be executed in Handle().
-	HandleFunc func(ctx context.Context, w EventWriter[U], e Event[T])
-	// Number of concurrent workers to run.
-	NWorkers int
-}
+// Handler Options constructor type.
+type HandlerOption[T, U any] func() (Handler[T, U], Handler[T, U], int)
 
-func (ch *BaseHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
-	select {
-	case <-ctx.Done():
-		w.Write(NewErrHandlerEvent[U](ch, ctx.Err()))
-
-		return
-	default:
-		ch.HandleFunc(ctx, w, event)
+// Option to use with handler.
+func WithOptions[T, U any](
+	handler Handler[T, U],
+	errorHandler Handler[T, U],
+	workers int,
+) HandlerOption[T, U] {
+	return func() (Handler[T, U], Handler[T, U], int) {
+		return handler, errorHandler, workers
 	}
 }
 
-func (ch *BaseHandler[T, U]) Workers() int {
-	return ch.NWorkers
+// Option that specifies worker pool size for handler.
+func WithWorkerPool[T, U any](handler Handler[T, U], workers int) HandlerOption[T, U] {
+	return WithOptions[T, U](handler, defaultErrorHandler[T, U](), workers)
 }
 
-// Returns Handler[T, U].
-func HandlerFunc[T, U any](handle func(context.Context, T) (U, error)) Handler[T, U] {
-	return handlerFunc[T, U](handle)
+// Option that specifies error handler to use along handler.
+func WithErrorHandler[T, U any](
+	handler Handler[T, U],
+	errorHandler Handler[T, U],
+) HandlerOption[T, U] {
+	return WithOptions(handler, errorHandler, 0)
 }
 
-type handlerFunc[T, U any] func(context.Context, T) (U, error)
+// Handle implements Handler[T, U].
+type Handle[T, U any] func(context.Context, EventWriter[U], Event[T])
 
-func (handle handlerFunc[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
+func (handle Handle[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
+	select {
+	case <-ctx.Done():
+		w.Write(NewErrHandlerEvent[U](handle, ctx.Err()))
+
+		return
+	default:
+		handle(ctx, w, event)
+	}
+}
+
+// HandleFunc implements Handler[T, U].
+type HandleFunc[T, U any] func(context.Context, T) (U, error)
+
+func (handle HandleFunc[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
 	select {
 	case <-ctx.Done():
 		w.Write(NewErrHandlerEvent[U](handle, ctx.Err()))
@@ -60,37 +78,8 @@ func (handle handlerFunc[T, U]) Handle(ctx context.Context, w EventWriter[U], ev
 	}
 }
 
-func (handlerFunc[T, U]) Workers() int {
-	return 0
-}
-
-type defaultErrorHandler[T, U any] struct{}
-
-func (h *defaultErrorHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
-	w.Write(NewErr[U](event.Err))
-}
-
-func (h *defaultErrorHandler[T, U]) Workers() int {
-	return 0
-}
-
-func withDefaultErrorHandler[T, U any](h Handler[T, U]) ErrorHandler[T, U] {
-	return &errHandler[T, U]{handler: h, errorHandler: new(defaultErrorHandler[T, U])}
-}
-
-type errHandler[T, U any] struct {
-	handler      Handler[T, U]
-	errorHandler Handler[T, U]
-}
-
-func (h *errHandler[T, U]) Handle(ctx context.Context, w EventWriter[U], event Event[T]) {
-	h.handler.Handle(ctx, w, event)
-}
-
-func (h *errHandler[T, U]) HandleError(ctx context.Context, w EventWriter[U], event Event[T]) {
-	h.errorHandler.Handle(ctx, w, event)
-}
-
-func (h *errHandler[T, U]) Workers() int {
-	return h.handler.Workers()
+func defaultErrorHandler[T, U any]() Handle[T, U] {
+	return Handle[T, U](func(ctx context.Context, w EventWriter[U], event Event[T]) {
+		w.Write(NewErr[U](event.Err))
+	})
 }

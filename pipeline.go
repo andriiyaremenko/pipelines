@@ -4,34 +4,41 @@ import (
 	"context"
 )
 
+// Combination of Handlers into one Pipeline.
+type Pipeline[T, U any] interface {
+	// Handles initial Event and returns result of Pipeline execution.
+	Handle(context.Context, Event[T]) Result[U]
+	// Starts workers to handle incoming Event.
+	Spin(context.Context, int) (EventWriter[T], EventReader[U])
+}
+
+// Pipline handlers constraint.
+type PipelineHandlers[T, U any] interface {
+	Handle[T, U] | HandleFunc[T, U] | HandlerOption[T, U] |
+		func(context.Context, EventWriter[U], Event[T]) | func(context.Context, T) (U, error)
+}
+
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
-func Append[T, U, H any](c Pipeline[T, U], h Handler[U, H]) Pipeline[T, H] {
-	return flow[T, H](
-		func(ctx context.Context, readers int) (EventWriter[T], EventReader[H]) {
-			w, r := c.Spin(ctx, h.Workers())
-			handler, hasErrorHandler := h.(ErrorHandler[U, H])
+func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeline[T, N] {
+	handler, errHandler, workers := expandOptions[U, N](h)
 
-			if !hasErrorHandler {
-				handler = withDefaultErrorHandler(h)
-			}
+	return flow[T, N](
+		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
+			w, r := c.Spin(ctx, workers)
 
-			return w, startWorkers(ctx, handler, r, readers)
+			return w, startWorkers(ctx, handler, errHandler, r, readers, workers)
 		},
 	)
 }
 
 // Creates new Pipeline[T, U].
-func New[T, U any](h Handler[T, U]) Pipeline[T, U] {
+func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
+	handler, errHandler, workers := expandOptions[T, U](h)
+
 	return flow[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-			rw := newEventRW[T](h.Workers())
-			handler, hasErrorHandler := h.(ErrorHandler[T, U])
-
-			if !hasErrorHandler {
-				handler = withDefaultErrorHandler(h)
-			}
-
-			r := startWorkers(ctx, handler, rw, readers)
+			rw := newEventRW[T](workers)
+			r := startWorkers(ctx, handler, errHandler, rw, readers, workers)
 
 			return rw.GetWriter(), r
 		},
@@ -56,9 +63,13 @@ func (spin flow[T, U]) Spin(ctx context.Context, readers int) (EventWriter[T], E
 	return spin(ctx, readers)
 }
 
-func startWorkers[T, U any](ctx context.Context, handler ErrorHandler[T, U], r EventReader[T], readers int) EventReader[U] {
+func startWorkers[T, U any](
+	ctx context.Context,
+	handler, errorHandler Handler[T, U],
+	r EventReader[T],
+	readers, workers int,
+) EventReader[U] {
 	rw := newEventRW[U](readers)
-	workers := handler.Workers()
 
 	if workers == 0 {
 		workers = 1
@@ -69,7 +80,7 @@ func startWorkers[T, U any](ctx context.Context, handler ErrorHandler[T, U], r E
 		go func() {
 			for event := range r.Read() {
 				if event.Err != nil {
-					handler.HandleError(ctx, w, event)
+					errorHandler.Handle(ctx, w, event)
 					continue
 				}
 
@@ -80,4 +91,23 @@ func startWorkers[T, U any](ctx context.Context, handler ErrorHandler[T, U], r E
 	}
 
 	return rw
+}
+
+func expandOptions[T, U any](v any) (Handler[T, U], Handler[T, U], int) {
+	handle, ok := v.(func(context.Context, EventWriter[U], Event[T]))
+	if ok {
+		return Handle[T, U](handle), defaultErrorHandler[T, U](), 0
+	}
+
+	handleFunc, ok := v.(func(context.Context, T) (U, error))
+	if ok {
+		return HandleFunc[T, U](handleFunc), defaultErrorHandler[T, U](), 0
+	}
+
+	opts, ok := v.(HandlerOption[T, U])
+	if ok {
+		return opts()
+	}
+
+	return v.(Handler[T, U]), defaultErrorHandler[T, U](), 0
 }

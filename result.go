@@ -4,6 +4,17 @@ import "sync"
 
 var _ Result[any] = new(result[any])
 
+// Result returned by executing Pipeline
+type Result[T any] interface {
+	// Returns Event[T] channel to read events returned by executing Pipeline.
+	Events() <-chan Event[T]
+
+	// Terminates reading of the events.
+	// Might take time to execute.
+	// Should be called inside the same goroutine with Events().
+	Close()
+}
+
 // Reducer function type to use in pipelines.Reduce.
 type Reducer[T, U any] func(U, T, error) (U, error)
 

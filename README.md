@@ -19,14 +19,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	handler1 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
 			r.Write(pipelines.Event[int]{Payload: 42})
-		}}
-	handler2 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
 			r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
-		}}
+	}
 
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
@@ -57,14 +55,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	handler1 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
 			r.Write(pipelines.E[int]{P: 42})
-		}}
-	handler2 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
 			r.Write(pipelines.E[int]{P: 42 + e.Payload()})
-		}}
+	}
 
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)

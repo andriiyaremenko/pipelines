@@ -23,24 +23,22 @@ func WorkerShouldStartAndHandleEvents(t *testing.T) {
 	ctx := context.TODO()
 	ctx, cancel := context.WithCancel(ctx)
 
-	handler1 := &pipelines.BaseHandler[string, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-		}}
-	handler2 := &pipelines.BaseHandler[int, int]{
-		HandleFunc: func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
-		}}
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+		r.Write(pipelines.Event[int]{Payload: 1})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+		r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
+	}
 	handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 		return 1 + n, nil
 	}
 
 	c := pipelines.New[string, int](handler1)
 	c = pipelines.Append[string, int, int](c, handler2)
-	c = pipelines.Append(c, pipelines.HandlerFunc(handlerFunc3))
+	c = pipelines.Append[string, int, int](c, handlerFunc3)
 
 	var wg sync.WaitGroup
 	eventSink := func(r pipelines.Result[int]) {

@@ -10,6 +10,14 @@ var (
 	WorkerStopped = errors.New("command worker is stopped")
 )
 
+// Asynchronous Pipeline
+type Worker[T, U any] interface {
+	// Asynchronously handles Event and returns error if Worker is stopped.
+	Handle(Event[T]) error
+	// returns false if Worker was stopped.
+	IsRunning() bool
+}
+
 // Returns Worker based on Pipeline[T, U].
 // eventSink is used to process the Result[U] of execution.
 func NewWorker[T, U any](ctx context.Context, eventSink func(Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
