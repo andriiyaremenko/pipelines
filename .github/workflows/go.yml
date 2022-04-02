@@ -22,7 +22,7 @@ jobs:
       run: go build -v ./...
 
     - name: Test
-      run: go test . -race --cover --cpu=1,99 --failfast -count=100
+      run: go test -race --cover
 
     - name: Bench
       run: go test -benchmem -bench=. ./...
