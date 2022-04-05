@@ -20,7 +20,7 @@ type Reducer[T, U any] func(U, T, error) (U, error)
 
 // Reducer function to use in pipelines.Reduce.
 // Skips errors, by calling skip callback.
-func SkipErrors[T, U any](reducer func(U, T) U, skip func(error)) Reducer[T, U] {
+func SkipErrors[T, U any, Reduce func(U, T) U](reduce Reduce, skip func(error)) Reducer[T, U] {
 	return func(agg U, next T, err error) (U, error) {
 		if err != nil {
 			skip(err)
@@ -28,25 +28,25 @@ func SkipErrors[T, U any](reducer func(U, T) U, skip func(error)) Reducer[T, U] 
 			return agg, nil
 		}
 
-		return reducer(agg, next), nil
+		return reduce(agg, next), nil
 	}
 }
 
 // Reducer function to use in pipelines.Reduce.
 // Returns on first encountered error.
-func NoError[T, U any](reducer func(U, T) U) Reducer[T, U] {
+func NoError[T, U any, Reduce func(U, T) U](reduce Reduce) Reducer[T, U] {
 	return func(agg U, next T, err error) (U, error) {
 		if err != nil {
 			return agg, err
 		}
 
-		return reducer(agg, next), nil
+		return reduce(agg, next), nil
 	}
 }
 
 // Reducer function to process pipelines.Result.
 // Will return on first error returned by Reducer callback.
-func Reduce[T, U any](result Result[T], reduce Reducer[T, U], seed U) (U, error) {
+func Reduce[T, U any, Reduce Reducer[T, U]](result Result[T], reduce Reduce, seed U) (U, error) {
 	defer result.Close()
 
 	var err error

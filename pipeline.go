@@ -4,14 +4,6 @@ import (
 	"context"
 )
 
-// Combination of Handlers into one Pipeline.
-type Pipeline[T, U any] interface {
-	// Handles initial Event and returns result of Pipeline execution.
-	Handle(context.Context, Event[T]) Result[U]
-	// Starts workers to handle incoming Event.
-	Spin(context.Context, int) (EventWriter[T], EventReader[U])
-}
-
 // Pipeline handlers constraint.
 type PipelineHandlers[T, U any] interface {
 	Handler[T, U] | HandlerOption[T, U] |
@@ -22,9 +14,9 @@ type PipelineHandlers[T, U any] interface {
 func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeline[T, N] {
 	handler, workers := expandOptions[U, N](h)
 
-	return flow[T, N](
+	return Pipeline[T, N](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
-			w, r := c.Spin(ctx, workers)
+			w, r := c(ctx, workers)
 
 			return w, startWorkers(ctx, handler, r, readers, workers)
 		},
@@ -35,7 +27,7 @@ func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeli
 func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
 	handler, workers := expandOptions[T, U](h)
 
-	return flow[T, U](
+	return Pipeline[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
 			rw := newEventRW[T](workers)
 			r := startWorkers(ctx, handler, rw, readers, workers)
@@ -45,11 +37,13 @@ func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
 	)
 }
 
-type flow[T, U any] func(context.Context, int) (EventWriter[T], EventReader[U])
+// Combination of Handlers into one Pipeline.
+type Pipeline[T, U any] func(context.Context, int) (EventWriter[T], EventReader[U])
 
-func (spin flow[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
+// Handles initial Event and returns result of Pipeline execution.
+func (pipeline Pipeline[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
 	ctx, cancel := context.WithCancel(ctx)
-	w, r := spin(ctx, 1)
+	w, r := pipeline(ctx, 1)
 
 	result := newResult(r.Read(), cancel)
 
@@ -57,10 +51,6 @@ func (spin flow[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
 	w.Done()
 
 	return result
-}
-
-func (spin flow[T, U]) Spin(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-	return spin(ctx, readers)
 }
 
 func startWorkers[T, U any](
