@@ -136,7 +136,7 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int](c, pipelines.WithWorkerPool(handler2, 4))
+		c = pipelines.Append[string, int, int](c, pipelines.WithHandlerPool(handler2, 4))
 		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 		value, err := pipelines.Reduce(

@@ -25,8 +25,8 @@ func WithOptions[T, U any](handler Handler[T, U], errorHandler Handler[error, U]
 	}
 }
 
-// Option that specifies worker pool size for handler.
-func WithWorkerPool[T, U any](handler Handler[T, U], workers int) HandlerOption[T, U] {
+// Option that specifies handler pool size.
+func WithHandlerPool[T, U any](handler Handler[T, U], workers int) HandlerOption[T, U] {
 	return WithOptions(handler, defaultErrorHandler[U](), workers)
 }
 

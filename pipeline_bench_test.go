@@ -100,7 +100,7 @@ func BenchmarkParallelWorkers(b *testing.B) {
 	}
 
 	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithWorkerPool(handler2, 4))
+	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
@@ -213,7 +213,7 @@ func BenchmarkParallelWorkersReduce(b *testing.B) {
 	}
 
 	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithWorkerPool(handler2, 4))
+	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {

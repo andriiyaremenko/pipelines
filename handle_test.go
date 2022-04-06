@@ -83,7 +83,7 @@ var _ = Describe("Handle", func() {
 		)
 		_fn1 := pipelines.AppendErrHandle(
 			_errFn,
-			pipelines.LiftNoContext(func(err error) (int, error) { return 0, nil }),
+			pipelines.LiftNoContext(func(err error) (int, error) { return err.(*pipelines.Error[int]).Payload, nil }),
 		)
 		fn := pipelines.AppendHandle(
 			_fn1,
@@ -92,7 +92,7 @@ var _ = Describe("Handle", func() {
 		v, err := fn(context.TODO(), 1)
 
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(v).To(Equal("got 0"))
+		Expect(v).To(Equal("got 1"))
 
 		_fn2 := pipelines.AppendErrHandle(
 			_errFn,
@@ -105,7 +105,7 @@ var _ = Describe("Handle", func() {
 		v, err = fn(context.TODO(), 1)
 
 		Expect(err).Should(HaveOccurred())
-		Expect(err).Should(MatchError("wrapped: failed"))
+		Expect(err).Should(MatchError("wrapped: error processing int: failed"))
 
 		_fn3 := pipelines.AppendErrHandle(
 			_fn,

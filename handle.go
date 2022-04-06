@@ -47,7 +47,7 @@ func AppendErrHandle[T, U any, H Handle[T, U], ErrH Handle[error, U]](h H, errH 
 	return func(ctx context.Context, payload T) (U, error) {
 		v, err := h(ctx, payload)
 		if err != nil {
-			return errH(ctx, err)
+			return errH(ctx, NewError(err, payload))
 		}
 
 		return v, nil
