@@ -19,17 +19,17 @@ import (
 func main() {
 	ctx := context.Background()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
 			r.Write(pipelines.Event[int]{Payload: 42})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 42 + e.Payload})
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
+			r.Write(pipelines.Event[int]{Payload: 42 + e})
 	}
 
-	c := pipelines.New[string, int](handler1)
-	c = pipelines.Append[string, int, int](c, handler2)
+	c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
+	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
 	v, err := pipelines.Reduce(
-		c.Handle(ctx, pipelines.Event[string]{Payload: "start"}),
+		c.Handle(ctx, "start"),
 		pipelines.NoError(func(sum, next int) int { return sum + next }),
 		0,
 	)
@@ -55,17 +55,17 @@ import (
 func main() {
 	ctx := context.Background()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
 			r.Write(pipelines.E[int]{P: 42})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.E[int]{P: 42 + e.Payload()})
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
+			r.Write(pipelines.E[int]{P: 42 + e})
 	}
 
-	c := pipelines.New[string, int](handler1)
-	c = pipelines.Append[string, int, int](c, handler2)
+	c := pipelines.New[int, int, pipelines.Handler[int, int]](handler1)
+	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
 
-	eventSink := func(r pipelines.Result[int]) {
+	eventSink := func(r *pipelines.Result[int]) {
 		v, err := pipelines.Reduce(
 			r,
 			pipelines.NoError(func(sum, next int) int { return sum + next }),
@@ -82,7 +82,7 @@ func main() {
 	}
 
 	w := pipelines.NewWorker(ctx, eventSink, c)
-	err := w.Handle(pipelines.E[int]{P: 0})
+	err := w.Handle(0)
 
 	// handle worker shut down error
 	if err != nil {

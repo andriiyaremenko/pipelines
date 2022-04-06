@@ -13,14 +13,14 @@ var (
 // Asynchronous Pipeline
 type Worker[T, U any] interface {
 	// Asynchronously handles Event and returns error if Worker is stopped.
-	Handle(Event[T]) error
+	Handle(T) error
 	// returns false if Worker was stopped.
 	IsRunning() bool
 }
 
 // Returns Worker based on Pipeline[T, U].
 // eventSink is used to process the Result[U] of execution.
-func NewWorker[T, U any](ctx context.Context, eventSink func(Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
+func NewWorker[T, U any](ctx context.Context, eventSink func(*Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
 	w := &worker[T, U]{
 		ctx:       ctx,
 		started:   false,
@@ -38,12 +38,12 @@ type worker[T, U any] struct {
 	rwMu sync.RWMutex
 
 	pipeline  Pipeline[T, U]
-	eventPipe chan Event[T]
-	eventSink func(Result[U])
+	eventPipe chan T
+	eventSink func(*Result[U])
 	started   bool
 }
 
-func (w *worker[T, U]) Handle(event Event[T]) error {
+func (w *worker[T, U]) Handle(payload T) error {
 	w.rwMu.RLock()
 	defer w.rwMu.RUnlock()
 
@@ -51,7 +51,7 @@ func (w *worker[T, U]) Handle(event Event[T]) error {
 		return WorkerStopped
 	}
 
-	w.eventPipe <- event
+	w.eventPipe <- payload
 
 	return nil
 }
@@ -70,7 +70,7 @@ func (w *worker[T, U]) start() {
 
 	w.rwMu.Lock()
 
-	w.eventPipe = make(chan Event[T])
+	w.eventPipe = make(chan T)
 	w.started = true
 
 	w.rwMu.Unlock()

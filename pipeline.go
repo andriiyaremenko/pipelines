@@ -4,33 +4,33 @@ import (
 	"context"
 )
 
-// Pipeline handlers constraint.
+// Pipeline handler constraint.
 type PipelineHandlers[T, U any] interface {
-	Handler[T, U] | HandlerOption[T, U] |
-		func(context.Context, EventWriter[U], Event[T])
+	Handler[T, U] | HandlerOption[T, U]
+	ExpandOptions() (Handler[T, U], Handler[error, U], int)
 }
 
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
 func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeline[T, N] {
-	handler, workers := expandOptions[U, N](h)
+	handler, errHandle, workers := h.ExpandOptions()
 
 	return Pipeline[T, N](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
 			w, r := c(ctx, workers)
 
-			return w, startWorkers(ctx, handler, r, readers, workers)
+			return w, startWorkers(ctx, handler, errHandle, r, readers, workers)
 		},
 	)
 }
 
 // Creates new Pipeline[T, U].
 func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
-	handler, workers := expandOptions[T, U](h)
+	handler, errHandler, workers := h.ExpandOptions()
 
 	return Pipeline[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
 			rw := newEventRW[T](workers)
-			r := startWorkers(ctx, handler, rw, readers, workers)
+			r := startWorkers(ctx, handler, errHandler, rw, readers, workers)
 
 			return rw.GetWriter(), r
 		},
@@ -41,13 +41,13 @@ func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
 type Pipeline[T, U any] func(context.Context, int) (EventWriter[T], EventReader[U])
 
 // Handles initial Event and returns result of Pipeline execution.
-func (pipeline Pipeline[T, U]) Handle(ctx context.Context, e Event[T]) Result[U] {
+func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) *Result[U] {
 	ctx, cancel := context.WithCancel(ctx)
 	w, r := pipeline(ctx, 1)
 
 	result := newResult(r.Read(), cancel)
 
-	w.Write(e)
+	w.Write(Event[T]{Payload: payload})
 	w.Done()
 
 	return result
@@ -56,6 +56,7 @@ func (pipeline Pipeline[T, U]) Handle(ctx context.Context, e Event[T]) Result[U]
 func startWorkers[T, U any](
 	ctx context.Context,
 	handle Handler[T, U],
+	errHandle Handler[error, U],
 	r EventReader[T],
 	readers, workers int,
 ) EventReader[U] {
@@ -69,7 +70,13 @@ func startWorkers[T, U any](
 		w := rw.GetWriter()
 		go func() {
 			for event := range r.Read() {
-				handle(ctx, w, event)
+				if event.Err != nil {
+					errHandle(ctx, w, event.Err)
+
+					continue
+				}
+
+				handle(ctx, w, event.Payload)
 			}
 
 			w.Done()
@@ -77,18 +84,4 @@ func startWorkers[T, U any](
 	}
 
 	return rw
-}
-
-func expandOptions[T, U any](v any) (Handler[T, U], int) {
-	handle, ok := v.(func(context.Context, EventWriter[U], Event[T]))
-	if ok {
-		return wrapHandleWithErrHandle(handle, defaultErrorHandler[T, U]()), 0
-	}
-
-	opts, ok := v.(HandlerOption[T, U])
-	if ok {
-		return opts()
-	}
-
-	return wrapHandleWithErrHandle(v.(Handler[T, U]), defaultErrorHandler[T, U]()), 0
 }

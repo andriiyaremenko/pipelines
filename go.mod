@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/onsi/ginkgo/v2 v2.1.3
 	github.com/onsi/gomega v1.19.0
-	github.com/pkg/errors v0.9.1
 	go.uber.org/goleak v1.1.12
 )
 

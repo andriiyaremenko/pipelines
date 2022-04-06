@@ -21,7 +21,7 @@ func BenchmarkSingleHandler(b *testing.B) {
 	)
 
 	for i := 0; i < b.N; i++ {
-		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
+		_ = pipelines.FirstError(c.Handle(ctx, nil))
 	}
 }
 
@@ -31,15 +31,15 @@ func BenchmarkChainedEvent(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], e pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], e any) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any](handler1)
-	c = pipelines.Append[any, any, any](c, handler2)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
@@ -52,13 +52,13 @@ func BenchmarkSeveralWrites(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
@@ -68,8 +68,8 @@ func BenchmarkSeveralWrites(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any](handler1)
-	c = pipelines.Append[any, any, any](c, handler2)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
@@ -83,13 +83,13 @@ func BenchmarkParallelWorkers(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
@@ -99,7 +99,7 @@ func BenchmarkParallelWorkers(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any](handler1)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
 	c = pipelines.Append[any, any, any](c, pipelines.WithWorkerPool(handler2, 4))
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 
@@ -136,15 +136,15 @@ func BenchmarkChainedEventReduce(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], e pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any](handler1)
-	c = pipelines.Append[any, any, any](c, handler2)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_, _ = pipelines.Reduce(
@@ -161,13 +161,13 @@ func BenchmarkSeveralWritesReduce(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
@@ -177,8 +177,8 @@ func BenchmarkSeveralWritesReduce(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any](handler1)
-	c = pipelines.Append[any, any, any](c, handler2)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
@@ -196,13 +196,13 @@ func BenchmarkParallelWorkersReduce(b *testing.B) {
 
 	defer cancel()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 	}
-	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ pipelines.Event[any]) {
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
 		r.Write(pipelines.Event[any]{})
@@ -212,7 +212,7 @@ func BenchmarkParallelWorkersReduce(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any](handler1)
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
 	c = pipelines.Append[any, any, any](c, pipelines.WithWorkerPool(handler2, 4))
 	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
 

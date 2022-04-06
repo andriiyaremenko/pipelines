@@ -2,19 +2,6 @@ package pipelines
 
 import "sync"
 
-var _ Result[any] = new(result[any])
-
-// Result returned by executing Pipeline
-type Result[T any] interface {
-	// Returns Event[T] channel to read events returned by executing Pipeline.
-	Events() <-chan Event[T]
-
-	// Terminates reading of the events.
-	// Might take time to execute.
-	// Should be called inside the same goroutine with Events().
-	Close()
-}
-
 // Reducer function type to use in pipelines.Reduce.
 type Reducer[T, U any] func(U, T, error) (U, error)
 
@@ -46,11 +33,11 @@ func NoError[T, U any, Reduce func(U, T) U](reduce Reduce) Reducer[T, U] {
 
 // Reducer function to process pipelines.Result.
 // Will return on first error returned by Reducer callback.
-func Reduce[T, U any, Reduce Reducer[T, U]](result Result[T], reduce Reduce, seed U) (U, error) {
-	defer result.Close()
+func Reduce[T, U any, Reduce Reducer[T, U]](result *Result[T], reduce Reduce, seed U) (U, error) {
+	defer result.close()
 
 	var err error
-	for e := range result.Events() {
+	for e := range result.Events {
 		seed, err = reduce(seed, e.Payload, e.Err)
 		if err != nil {
 			return seed, err
@@ -62,11 +49,11 @@ func Reduce[T, U any, Reduce Reducer[T, U]](result Result[T], reduce Reduce, see
 
 // Will collect only errors if there is any.
 // Will exhaust result.
-func Errors[T any](result Result[T]) []error {
-	defer result.Close()
+func Errors[T any](result *Result[T]) []error {
+	defer result.close()
 
 	errors := make([]error, 0, 1)
-	for e := range result.Events() {
+	for e := range result.Events {
 		if err := e.Err; err != nil {
 			errors = append(errors, err)
 		}
@@ -77,10 +64,10 @@ func Errors[T any](result Result[T]) []error {
 
 // Will return on first encountered error or nil.
 // Will exhaust result.
-func FirstError[T any](result Result[T]) error {
-	defer result.Close()
+func FirstError[T any](result *Result[T]) error {
+	defer result.close()
 
-	for e := range result.Events() {
+	for e := range result.Events {
 		if err := e.Err; err != nil {
 			return err
 		}
@@ -89,29 +76,28 @@ func FirstError[T any](result Result[T]) error {
 	return nil
 }
 
-func newResult[T any](events <-chan Event[T], stop func()) *result[T] {
-	return &result[T]{
-		events: events,
+func newResult[T any](events <-chan Event[T], stop func()) *Result[T] {
+	return &Result[T]{
+		Events: events,
 		stop:   stop,
 	}
 }
 
-type result[T any] struct {
+// Result returned by executing Pipeline
+type Result[T any] struct {
 	once sync.Once
 
-	events <-chan Event[T]
-	stop   func()
+	// Returns Event[T] channel to read events returned by executing Pipeline.
+	Events <-chan Event[T]
+
+	stop func()
 }
 
-func (r *result[T]) Events() <-chan Event[T] {
-	return r.events
-}
-
-func (r *result[T]) Close() {
+func (r *Result[T]) close() {
 	r.once.Do(func() {
 		r.stop()
 
-		for range r.events {
+		for range r.Events {
 		}
 	})
 }

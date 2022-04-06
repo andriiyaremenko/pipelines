@@ -1,0 +1,49 @@
+package pipelines_test
+
+import (
+	"context"
+	"errors"
+
+	"github.com/andriiyaremenko/pipelines"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+type TestWriter[T any] func(event pipelines.Event[T])
+
+func (writer TestWriter[T]) Write(event pipelines.Event[T]) {
+	writer(event)
+}
+
+func (writer TestWriter[T]) Done() {}
+
+var _ = Describe("Handler", func() {
+	It("HandleFunc will write success", func() {
+		fn := pipelines.HandleFunc(
+			pipelines.LiftOk(func(_ context.Context, n int) int { return n + 1 }),
+		)
+
+		var w TestWriter[int] = func(event pipelines.Event[int]) {
+			Expect(event.Err).ShouldNot(HaveOccurred())
+			Expect(event.Payload).To(Equal(2))
+		}
+
+		fn(context.TODO(), w, 1)
+	})
+
+	It("HandlerFunc will write error", func() {
+		fn := pipelines.HandleFunc(
+			pipelines.LiftErr[int](func(_ context.Context, n int) error { return errors.New("failed") }),
+		)
+
+		var w TestWriter[int] = func(event pipelines.Event[int]) {
+			Expect(event.Err).Should(HaveOccurred())
+			Expect(event.Err).Should(BeAssignableToTypeOf(new(pipelines.Error[int])))
+			Expect(event.Err).To(MatchError("error processing int: failed"))
+			Expect(event.Err.(*pipelines.Error[int]).Payload).To(Equal(1))
+			Expect(errors.Unwrap(event.Err)).To(MatchError("failed"))
+		}
+
+		fn(context.TODO(), w, 1)
+	})
+})

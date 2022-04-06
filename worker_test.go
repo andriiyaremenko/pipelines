@@ -17,25 +17,25 @@ var _ = Describe("Worker", func() {
 		ctx := context.TODO()
 		ctx, cancel := context.WithCancel(ctx)
 
-		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ pipelines.Event[string]) {
+		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
 		}
-		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e pipelines.Event[int]) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e.Payload})
+		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
+			r.Write(pipelines.Event[int]{Payload: 1 + e})
 		}
 		handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 			return 1 + n, nil
 		}
 
-		c := pipelines.New[string, int](handler1)
-		c = pipelines.Append[string, int, int](c, handler2)
+		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
+		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
 		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
 
 		var wg sync.WaitGroup
-		eventSink := func(r pipelines.Result[int]) {
+		eventSink := func(r *pipelines.Result[int]) {
 			value, err := pipelines.Reduce(
 				r,
 				pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
@@ -51,14 +51,14 @@ var _ = Describe("Worker", func() {
 
 		wg.Add(1)
 		go func() {
-			err := w.Handle(pipelines.Event[string]{Payload: "start"})
+			err := w.Handle("start")
 
 			Expect(err).ShouldNot(HaveOccurred())
 		}()
 
 		wg.Add(1)
 		go func() {
-			err := w.Handle(pipelines.Event[string]{Payload: "start"})
+			err := w.Handle("start")
 
 			Expect(err).ShouldNot(HaveOccurred())
 		}()
@@ -81,5 +81,40 @@ var _ = Describe("Worker", func() {
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("should start worker and handle events", func() {
+		ctx := context.TODO()
+		ctx, cancel := context.WithCancel(ctx)
+
+		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
+			r.Write(pipelines.Event[int]{Payload: 1})
+		}
+
+		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
+
+		var wg sync.WaitGroup
+		eventSink := func(r *pipelines.Result[int]) {
+			value, err := pipelines.Reduce(
+				r,
+				pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
+				[]int{},
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal([]int{1}))
+			wg.Done()
+		}
+
+		w := pipelines.NewWorker(ctx, eventSink, c)
+
+		cancel()
+		time.Sleep(time.Millisecond * 250)
+
+		err := w.Handle("start")
+
+		Eventually(w.IsRunning()).Should(BeFalse())
+		Expect(err).Should(HaveOccurred())
+		Expect(err).Should(MatchError(pipelines.WorkerStopped))
 	})
 })

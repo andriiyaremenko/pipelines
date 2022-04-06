@@ -4,35 +4,43 @@ import (
 	"context"
 )
 
-// Handle implements Handler[T, U].
-type Handler[T, U any] func(context.Context, EventWriter[U], Event[T])
+// Handler is used to handle particular event.
+type Handler[T, U any] func(context.Context, EventWriter[U], T)
 
-// Handler Options constructor type.
-type HandlerOption[T, U any] func() (Handler[T, U], int)
+func (h Handler[T, U]) ExpandOptions() (Handler[T, U], Handler[error, U], int) {
+	return h, defaultErrorHandler[U](), 0
+}
+
+// HandlerOption returns Handler, error Handler and worker pool to use in Pipeline.
+type HandlerOption[T, U any] func() (Handler[T, U], Handler[error, U], int)
+
+func (ho HandlerOption[T, U]) ExpandOptions() (Handler[T, U], Handler[error, U], int) {
+	return ho()
+}
 
 // Option to use with handler.
-func WithOptions[T, U any](handler, errorHandler Handler[T, U], workers int) HandlerOption[T, U] {
-	return func() (Handler[T, U], int) {
-		return wrapHandleWithErrHandle(handler, errorHandler), workers
+func WithOptions[T, U any](handler Handler[T, U], errorHandler Handler[error, U], workers int) HandlerOption[T, U] {
+	return func() (Handler[T, U], Handler[error, U], int) {
+		return handler, errorHandler, workers
 	}
 }
 
 // Option that specifies worker pool size for handler.
 func WithWorkerPool[T, U any](handler Handler[T, U], workers int) HandlerOption[T, U] {
-	return WithOptions(handler, defaultErrorHandler[T, U](), workers)
+	return WithOptions(handler, defaultErrorHandler[U](), workers)
 }
 
 // Option that specifies error handler to use along handler.
-func WithErrorHandler[T, U any](handler, errorHandler Handler[T, U]) HandlerOption[T, U] {
+func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[error, U]) HandlerOption[T, U] {
 	return WithOptions(handler, errorHandler, 0)
 }
 
-// HandleFunc returns handler function.
-func HandleFunc[T, U any](handle func(context.Context, T) (U, error)) Handler[T, U] {
-	return func(ctx context.Context, w EventWriter[U], event Event[T]) {
-		v, err := handle(ctx, event.Payload)
+// HandleFunc returns Handler function.
+func HandleFunc[T, U any](handle Handle[T, U]) Handler[T, U] {
+	return func(ctx context.Context, w EventWriter[U], payload T) {
+		v, err := handle(ctx, payload)
 		if err != nil {
-			w.Write(NewErrHandlerEvent[U](handle, err))
+			w.Write(NewErrEvent[U](NewError(err, payload)))
 
 			return
 		}
@@ -41,26 +49,8 @@ func HandleFunc[T, U any](handle func(context.Context, T) (U, error)) Handler[T,
 	}
 }
 
-func defaultErrorHandler[T, U any]() Handler[T, U] {
-	return (func(ctx context.Context, w EventWriter[U], event Event[T]) {
-		w.Write(NewErr[U](event.Err))
-	})
-}
-
-func wrapHandleWithErrHandle[T, U any](handle, handleError Handler[T, U]) Handler[T, U] {
-	return func(ctx context.Context, w EventWriter[U], event Event[T]) {
-		if event.Err != nil {
-			handleError(ctx, w, event)
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			w.Write(NewErrHandlerEvent[U](handle, ctx.Err()))
-
-			return
-		default:
-			handle(ctx, w, event)
-		}
+func defaultErrorHandler[U any]() Handler[error, U] {
+	return func(ctx context.Context, w EventWriter[U], err error) {
+		w.Write(NewErrEvent[U](err))
 	}
 }
