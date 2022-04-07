@@ -6,13 +6,9 @@ import (
 	"github.com/andriiyaremenko/pipelines/internal"
 )
 
-// Returns first encountered error.
+// Identity function of an error.
 var NoError = func(err error) error {
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // Skips errors, by calling skip callback.
