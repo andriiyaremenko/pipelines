@@ -1,54 +1,83 @@
 package pipelines
 
-import "sync"
+import (
+	"sync"
 
-// Reducer function type to use in pipelines.Reduce.
-type Reducer[T, U any] func(U, T, error) (U, error)
+	"github.com/andriiyaremenko/pipelines/internal"
+)
 
-// Reducer function to use in pipelines.Reduce.
+// Returns first encountered error.
+var NoError = func(err error) error {
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Skips errors, by calling skip callback.
-func SkipErrors[T, U any, Reduce func(U, T) U](reduce Reduce, skip func(error)) Reducer[T, U] {
-	return func(agg U, next T, err error) (U, error) {
+func SkipErrors(skip func(error)) func(error) error {
+	return func(err error) error {
 		if err != nil {
 			skip(err)
-
-			return agg, nil
 		}
 
-		return reduce(agg, next), nil
+		return nil
 	}
 }
 
-// Reducer function to use in pipelines.Reduce.
-// Returns on first encountered error.
-func NoError[T, U any, Reduce func(U, T) U](reduce Reduce) Reducer[T, U] {
-	return func(agg U, next T, err error) (U, error) {
-		if err != nil {
-			return agg, err
-		}
-
-		return reduce(agg, next), nil
-	}
-}
-
-// Reducer function to process pipelines.Result.
-// Will return on first error returned by Reducer callback.
-func Reduce[T, U any, Reduce Reducer[T, U]](result *Result[T], reduce Reduce, seed U) (U, error) {
+// ForEach will iterate through pipelines.Result.
+func ForEach[T any, Iterate func(int, T)](
+	result *Result[T],
+	iterate Iterate,
+	handleErr func(error) error,
+) error {
 	defer result.close()
 
-	var err error
+	i := 0
 	for e := range result.Events {
-		seed, err = reduce(seed, e.Payload, e.Err)
-		if err != nil {
-			return seed, err
+		if e.Err == nil {
+			iterate(i, e.Payload)
+
+			i++
+
+			continue
+		}
+
+		if err := handleErr(e.Err); err != nil {
+			return err
 		}
 	}
 
-	return seed, err
+	return nil
+}
+
+// Reduce will reduce pipelines.Result.
+func Reduce[T, U any, Reduce func(U, T) U](
+	result *Result[T],
+	seed U,
+	reduce Reduce,
+	handleErr func(error) error,
+) (U, error) {
+	defer result.close()
+
+	for e := range result.Events {
+		if e.Err == nil {
+			seed = reduce(seed, e.Payload)
+
+			continue
+		}
+
+		if err := handleErr(e.Err); err != nil {
+			return internal.Zero[U](), err
+		}
+	}
+
+	return seed, nil
 }
 
 // Will collect only errors if there is any.
-// Will exhaust result.
+// Will exhaust the result.
 func Errors[T any](result *Result[T]) []error {
 	defer result.close()
 
@@ -63,7 +92,7 @@ func Errors[T any](result *Result[T]) []error {
 }
 
 // Will return on first encountered error or nil.
-// Will exhaust result.
+// Will exhaust the result.
 func FirstError[T any](result *Result[T]) error {
 	defer result.close()
 

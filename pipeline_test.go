@@ -33,8 +33,8 @@ var _ = Describe("Pipeline", func() {
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
-			pipelines.NoError(func(prev, next int) int { return prev + next }),
-			0,
+			0, func(prev, next int) int { return prev + next },
+			pipelines.NoError,
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -60,8 +60,8 @@ var _ = Describe("Pipeline", func() {
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
-			pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
-			[]int{},
+			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+			pipelines.NoError,
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -91,8 +91,8 @@ var _ = Describe("Pipeline", func() {
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
-			pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
-			[]int{},
+			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+			pipelines.NoError,
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -141,8 +141,8 @@ var _ = Describe("Pipeline", func() {
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
-			pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
-			[]int{},
+			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+			pipelines.NoError,
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -170,13 +170,13 @@ var _ = Describe("Pipeline", func() {
 		for i := 10; i > 0; i-- {
 			_, _ = pipelines.Reduce(
 				c.Handle(ctx, "start"),
-				pipelines.NoError(func(sum, next int) int { return sum + next }),
-				0,
+				0, func(sum, next int) int { return sum + next },
+				pipelines.NoError,
 			)
 			_, _ = pipelines.Reduce(
 				c.Handle(ctx, "start"),
-				pipelines.SkipErrors(func(sum, next int) int { return sum + next }, func(error) {}),
-				0,
+				0, func(sum, next int) int { return sum + next },
+				pipelines.SkipErrors(func(error) {}),
 			)
 			_ = pipelines.FirstError(c.Handle(ctx, "start"))
 			_ = pipelines.Errors(c.Handle(ctx, "start"))

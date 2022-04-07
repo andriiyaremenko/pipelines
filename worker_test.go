@@ -38,8 +38,8 @@ var _ = Describe("Worker", func() {
 		eventSink := func(r *pipelines.Result[int]) {
 			value, err := pipelines.Reduce(
 				r,
-				pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
-				[]int{},
+				[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+				pipelines.NoError,
 			)
 
 			Expect(err).ShouldNot(HaveOccurred())
@@ -97,8 +97,8 @@ var _ = Describe("Worker", func() {
 		eventSink := func(r *pipelines.Result[int]) {
 			value, err := pipelines.Reduce(
 				r,
-				pipelines.NoError(func(arr []int, next int) []int { return append(arr, next) }),
-				[]int{},
+				[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+				pipelines.NoError,
 			)
 
 			Expect(err).ShouldNot(HaveOccurred())

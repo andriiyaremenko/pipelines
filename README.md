@@ -30,8 +30,8 @@ func main() {
 	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
 	v, err := pipelines.Reduce(
 		c.Handle(ctx, "start"),
-		pipelines.NoError(func(sum, next int) int { return sum + next }),
-		0,
+		0, func(sum, next int) int { return sum + next },
+		pipelines.NoError,
 	)
 
 	// handle error
@@ -68,8 +68,8 @@ func main() {
 	eventSink := func(r *pipelines.Result[int]) {
 		v, err := pipelines.Reduce(
 			r,
-			pipelines.NoError(func(sum, next int) int { return sum + next }),
-			0,
+			0, func(sum, next int) int { return sum + next },
+			pipelines.NoError,
 		)
 
 		// handle error
