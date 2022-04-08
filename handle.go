@@ -10,9 +10,9 @@ import (
 type Handle[T, U any] func(context.Context, T) (U, error)
 
 // Constructs Handle from function, that has only error output.
-func LiftErr[U, T any, Fn func(context.Context, T) error](fn Fn) Handle[T, U] {
-	return func(ctx context.Context, v T) (U, error) {
-		return internal.Zero[U](), fn(ctx, v)
+func LiftErr[T any, Fn func(context.Context, T) error](fn Fn) Handle[T, T] {
+	return func(ctx context.Context, v T) (T, error) {
+		return v, fn(ctx, v)
 	}
 }
 

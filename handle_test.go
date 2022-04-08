@@ -12,13 +12,13 @@ import (
 
 var _ = Describe("Handle", func() {
 	It("can lift error function", func() {
-		fn := pipelines.LiftErr[int](func(context.Context, int) error { return nil })
+		fn := pipelines.LiftErr(func(context.Context, int) error { return nil })
 		v, err := fn(context.TODO(), 0)
 
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(v).To(Equal(0))
 
-		fn = pipelines.LiftErr[int](func(context.Context, int) error { return errors.New("failed") })
+		fn = pipelines.LiftErr(func(context.Context, int) error { return errors.New("failed") })
 		v, err = fn(context.TODO(), 0)
 
 		Expect(err).Should(HaveOccurred())

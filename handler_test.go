@@ -33,7 +33,7 @@ var _ = Describe("Handler", func() {
 
 	It("HandlerFunc will write error", func() {
 		fn := pipelines.HandleFunc(
-			pipelines.LiftErr[int](func(_ context.Context, n int) error { return errors.New("failed") }),
+			pipelines.LiftErr(func(_ context.Context, n int) error { return errors.New("failed") }),
 		)
 
 		var w TestWriter[int] = func(event pipelines.Event[int]) {
