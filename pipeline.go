@@ -14,18 +14,15 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return Pipeline[T, U](
-		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-			rw := newEventRW[T](pool)
-			r := startWorkers(ctx, h, errHandler, rw, readers, pool)
+	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
+		rw := newEventRW[T](pool)
 
-			return rw.GetWriter(), r
-		},
-	)
+		return rw.GetWriter(), startWorkers(ctx, h, errHandler, rw, readers, pool)
+	}
 }
 
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
-func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
+func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
 	h = withRecovery(h)
 	errHandler := defaultErrorHandler[N]()
 	pool := 0
@@ -34,26 +31,22 @@ func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptio
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return Pipeline[T, N](
-		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
-			w, r := c(ctx, pool)
+	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
+		w, r := c(ctx, pool)
 
-			return w, startWorkers(ctx, h, errHandler, r, readers, pool)
-		},
-	)
+		return w, startWorkers(ctx, h, errHandler, r, readers, pool)
+	}
 }
 
 // Adds error Handler to the Pipeline[T, U] resulting in new Pipeline[T, U].
 func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	h = withRecovery(h)
 
-	return Pipeline[T, U](
-		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-			w, r := c(ctx, readers)
+	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
+		w, r := c(ctx, readers)
 
-			return w, startWorkers(ctx, PassThrough[U](), h, r, readers, readers)
-		},
-	)
+		return w, startWorkers(ctx, PassThrough[U](), h, r, readers, readers)
+	}
 }
 
 // Combination of Handlers into one Pipeline.
