@@ -341,3 +341,116 @@ func BenchmarkParallelWorkersForEach(b *testing.B) {
 		)
 	}
 }
+
+func BenchmarkSingleHandlerInterrupt(b *testing.B) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	c := pipelines.New[any, any](
+		pipelines.HandleFunc(
+			func(ctx context.Context, _ any) (any, error) {
+				return nil, nil
+			}),
+	)
+
+	for i := 0; i < b.N; i++ {
+		_ = pipelines.Interrupt(
+			c.Handle(ctx, pipelines.Event[any]{}),
+			func(any, error) bool { return false },
+		)
+	}
+}
+
+func BenchmarkChainedEventInterrupt(b *testing.B) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+	}
+
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+
+	for i := 0; i < b.N; i++ {
+		_ = pipelines.Interrupt(
+			c.Handle(ctx, pipelines.Event[any]{}),
+			func(any, error) bool { return false },
+		)
+	}
+}
+
+func BenchmarkSeveralWritesInterrupt(b *testing.B) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+	}
+	handlerFunc3 := func(ctx context.Context, _ any) (any, error) {
+		return nil, nil
+	}
+
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+
+	for i := 0; i < b.N; i++ {
+		_ = pipelines.Interrupt(
+			c.Handle(ctx, pipelines.Event[any]{}),
+			func(any, error) bool { return false },
+		)
+	}
+}
+
+func BenchmarkParallelWorkersInterrupt(b *testing.B) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	handler1 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+	}
+	handler2 := func(ctx context.Context, r pipelines.EventWriter[any], _ any) {
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+		r.Write(pipelines.Event[any]{})
+	}
+	handlerFunc3 := func(ctx context.Context, _ any) (any, error) {
+		return nil, nil
+	}
+
+	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
+	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
+	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+
+	for i := 0; i < b.N; i++ {
+		_ = pipelines.Interrupt(
+			c.Handle(ctx, pipelines.Event[any]{}),
+			func(any, error) bool { return false },
+		)
+	}
+}

@@ -22,6 +22,19 @@ func SkipErrors(skip func(error)) func(error) error {
 	}
 }
 
+// Interrupt will iterate through pipelines.Result until callback returns true.
+func Interrupt[T any, Interrupt func(T, error) bool](result *Result[T], interrupt Interrupt) bool {
+	defer result.close()
+
+	for e := range result.Events {
+		if interrupt(e.Payload, e.Err) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ForEach will iterate through pipelines.Result.
 func ForEach[T any, Iterate func(int, T)](
 	result *Result[T],
