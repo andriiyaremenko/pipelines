@@ -15,7 +15,7 @@ var _ = Describe("Pipeline", func() {
 
 	It("can create pipeline", func() {
 		handler := func(context.Context, string) (string, error) { return "", nil }
-		c := pipelines.New[string, string](pipelines.HandleFunc(handler))
+		c := pipelines.New(pipelines.HandleFunc(handler))
 		err := pipelines.FirstError(c.Handle(ctx, ""))
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -28,8 +28,8 @@ var _ = Describe("Pipeline", func() {
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
 			r.Write(pipelines.Event[int]{Payload: 42 + e})
 		}
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2)
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
@@ -54,9 +54,9 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2)
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
@@ -85,9 +85,9 @@ var _ = Describe("Pipeline", func() {
 		}
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int](c, pipelines.WithErrorHandler(handler2, handlerErr))
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2, pipelines.WithErrorHandler(handlerErr))
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
@@ -113,9 +113,9 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2)
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 		err := pipelines.FirstError(c.Handle(ctx, "start"))
 
 		Expect(err).Should(HaveOccurred())
@@ -135,9 +135,9 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int](c, pipelines.WithHandlerPool(handler2, 4))
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](4))
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 		value, err := pipelines.Reduce(
 			c.Handle(ctx, "start"),
@@ -163,9 +163,9 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2)
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 		for i := 10; i > 0; i-- {
 			_, _ = pipelines.Reduce(
@@ -195,4 +195,33 @@ var _ = Describe("Pipeline", func() {
 
 		Expect(err).ShouldNot(HaveOccurred())
 	})
+
+	It("should use options without overriding", func() {
+		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
+			r.Write(pipelines.Event[int]{Payload: 1})
+		}
+		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
+
+		c := pipelines.New(handler1)
+		c = pipelines.Append(
+			c,
+			pipelines.PassThrough[int](),
+			pipelines.WithErrorHandler(handlerErr),
+			pipelines.WithHandlerPool[int](4),
+		)
+
+		value, err := pipelines.Reduce(
+			c.Handle(ctx, "start"),
+			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+			pipelines.NoError,
+		)
+
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(value).To(Equal([]int{1, 1, 1, 1}))
+	})
+
 })

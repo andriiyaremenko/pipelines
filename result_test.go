@@ -34,9 +34,9 @@ var _ = Describe("Result", func() {
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
-	c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-	c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	Context("ForEach", func() {
 		It("should iterate through results using iterator", func() {

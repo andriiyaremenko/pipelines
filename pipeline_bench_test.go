@@ -13,7 +13,7 @@ func BenchmarkSingleHandler(b *testing.B) {
 
 	defer cancel()
 
-	c := pipelines.New[any, any](
+	c := pipelines.New(
 		pipelines.HandleFunc(
 			func(ctx context.Context, _ any) (any, error) {
 				return nil, nil
@@ -38,8 +38,8 @@ func BenchmarkChainedEvent(b *testing.B) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
@@ -68,9 +68,9 @@ func BenchmarkSeveralWrites(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
@@ -99,9 +99,9 @@ func BenchmarkParallelWorkers(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.FirstError(c.Handle(ctx, pipelines.Event[any]{}))
@@ -114,7 +114,7 @@ func BenchmarkSingleHandlerReduce(b *testing.B) {
 
 	defer cancel()
 
-	c := pipelines.New[any, any](
+	c := pipelines.New(
 		pipelines.HandleFunc(
 			func(ctx context.Context, _ any) (any, error) {
 				return nil, nil
@@ -144,8 +144,8 @@ func BenchmarkChainedEventReduce(b *testing.B) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_, _ = pipelines.Reduce(
@@ -179,9 +179,9 @@ func BenchmarkSeveralWritesReduce(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_, _ = pipelines.Reduce(
@@ -215,9 +215,9 @@ func BenchmarkParallelWorkersReduce(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_, _ = pipelines.Reduce(
@@ -235,7 +235,7 @@ func BenchmarkSingleHandlerForEach(b *testing.B) {
 
 	defer cancel()
 
-	c := pipelines.New[any, any](
+	c := pipelines.New(
 		pipelines.HandleFunc(
 			func(ctx context.Context, _ any) (any, error) {
 				return nil, nil
@@ -263,8 +263,8 @@ func BenchmarkChainedEventForEach(b *testing.B) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.ForEach(
@@ -296,9 +296,9 @@ func BenchmarkSeveralWritesForEach(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.ForEach(
@@ -330,9 +330,9 @@ func BenchmarkParallelWorkersForEach(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.ForEach(
@@ -348,7 +348,7 @@ func BenchmarkSingleHandlerInterrupt(b *testing.B) {
 
 	defer cancel()
 
-	c := pipelines.New[any, any](
+	c := pipelines.New(
 		pipelines.HandleFunc(
 			func(ctx context.Context, _ any) (any, error) {
 				return nil, nil
@@ -376,8 +376,8 @@ func BenchmarkChainedEventInterrupt(b *testing.B) {
 		r.Write(pipelines.Event[any]{})
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.Interrupt(
@@ -409,9 +409,9 @@ func BenchmarkSeveralWritesInterrupt(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.Interrupt(
@@ -443,9 +443,9 @@ func BenchmarkParallelWorkersInterrupt(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any](c, pipelines.WithHandlerPool(handler2, 4))
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
 		_ = pipelines.Interrupt(

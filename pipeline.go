@@ -4,33 +4,37 @@ import (
 	"context"
 )
 
-// Pipeline handler constraint.
-type PipelineHandlers[T, U any] interface {
-	Handler[T, U] | HandlerOption[T, U]
-	ExpandOptions() (Handler[T, U], Handler[error, U], int)
-}
-
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
-func Append[T, U, N any, H PipelineHandlers[U, N]](c Pipeline[T, U], h H) Pipeline[T, N] {
-	handler, errHandle, workers := h.ExpandOptions()
+func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
+	errHandler := defaultErrorHandler[N]()
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
 
 	return Pipeline[T, N](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
-			w, r := c(ctx, workers)
+			w, r := c(ctx, pool)
 
-			return w, startWorkers(ctx, handler, errHandle, r, readers, workers)
+			return w, startWorkers(ctx, h, errHandler, r, readers, pool)
 		},
 	)
 }
 
 // Creates new Pipeline[T, U].
-func New[T, U any, H PipelineHandlers[T, U]](h H) Pipeline[T, U] {
-	handler, errHandler, workers := h.ExpandOptions()
+func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
+	errHandler := defaultErrorHandler[U]()
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
 
 	return Pipeline[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-			rw := newEventRW[T](workers)
-			r := startWorkers(ctx, handler, errHandler, rw, readers, workers)
+			rw := newEventRW[T](pool)
+			r := startWorkers(ctx, h, errHandler, rw, readers, pool)
 
 			return rw.GetWriter(), r
 		},

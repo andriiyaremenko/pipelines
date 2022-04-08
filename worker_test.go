@@ -30,9 +30,9 @@ var _ = Describe("Worker", func() {
 			return 1 + n, nil
 		}
 
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-		c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-		c = pipelines.Append[string, int, int](c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2)
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 		var wg sync.WaitGroup
 		eventSink := func(r *pipelines.Result[int]) {
@@ -91,7 +91,7 @@ var _ = Describe("Worker", func() {
 			r.Write(pipelines.Event[int]{Payload: 1})
 		}
 
-		c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
+		c := pipelines.New(handler1)
 
 		var wg sync.WaitGroup
 		eventSink := func(r *pipelines.Result[int]) {

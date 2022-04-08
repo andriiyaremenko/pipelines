@@ -27,9 +27,9 @@ func BenchmarkWorkerWithMultipleWrites(b *testing.B) {
 		return nil, nil
 	}
 
-	c := pipelines.New[any, any, pipelines.Handler[any, any]](handler1)
-	c = pipelines.Append[any, any, any, pipelines.Handler[any, any]](c, handler2)
-	c = pipelines.Append[any, any, any](c, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.New(handler1)
+	c = pipelines.Append(c, handler2)
+	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
 	eventSink := func(r *pipelines.Result[any]) { _ = pipelines.FirstError(r) }
 	w := pipelines.NewWorker(ctx, eventSink, c)

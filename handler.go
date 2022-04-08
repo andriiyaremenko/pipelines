@@ -7,32 +7,39 @@ import (
 // Handler is used to handle particular event.
 type Handler[T, U any] func(context.Context, EventWriter[U], T)
 
-func (h Handler[T, U]) ExpandOptions() (Handler[T, U], Handler[error, U], int) {
-	return h, defaultErrorHandler[U](), 0
-}
-
 // HandlerOption returns Handler, error Handler and worker pool to use in Pipeline.
-type HandlerOption[T, U any] func() (Handler[T, U], Handler[error, U], int)
-
-func (ho HandlerOption[T, U]) ExpandOptions() (Handler[T, U], Handler[error, U], int) {
-	return ho()
-}
+type HandlerOptions[T any] func(Handler[error, T], int) (Handler[error, T], int)
 
 // Option to use with handler.
-func WithOptions[T, U any](handler Handler[T, U], errorHandler Handler[error, U], workers int) HandlerOption[T, U] {
-	return func() (Handler[T, U], Handler[error, U], int) {
-		return handler, errorHandler, workers
+func WithOptions[T any](errorHandler Handler[error, T], handlerPool int) HandlerOptions[T] {
+	return func(oldErrorHandler Handler[error, T], oldHandlerPool int) (Handler[error, T], int) {
+		if errorHandler == nil {
+			errorHandler = oldErrorHandler
+		}
+
+		if handlerPool < 1 {
+			handlerPool = oldHandlerPool
+		}
+
+		return errorHandler, handlerPool
 	}
 }
 
 // Option that specifies handler pool size.
-func WithHandlerPool[T, U any](handler Handler[T, U], workers int) HandlerOption[T, U] {
-	return WithOptions(handler, defaultErrorHandler[U](), workers)
+func WithHandlerPool[T any](size int) HandlerOptions[T] {
+	return WithOptions[T](nil, size)
 }
 
 // Option that specifies error handler to use along handler.
-func WithErrorHandler[T, U any](handler Handler[T, U], errorHandler Handler[error, U]) HandlerOption[T, U] {
-	return WithOptions(handler, errorHandler, 0)
+func WithErrorHandler[T any](errorHandler Handler[error, T]) HandlerOptions[T] {
+	return WithOptions(errorHandler, 0)
+}
+
+// Handler that writes same payload it receives without changes.
+func PassThrough[T any]() Handler[T, T] {
+	return func(ctx context.Context, w EventWriter[T], payload T) {
+		w.Write(Event[T]{Payload: payload})
+	}
 }
 
 // HandleFunc returns Handler function.
