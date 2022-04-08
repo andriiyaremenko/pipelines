@@ -4,6 +4,25 @@ import (
 	"context"
 )
 
+// Creates new Pipeline[T, U].
+func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
+	errHandler := defaultErrorHandler[U]()
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
+
+	return Pipeline[T, U](
+		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
+			rw := newEventRW[T](pool)
+			r := startWorkers(ctx, h, errHandler, rw, readers, pool)
+
+			return rw.GetWriter(), r
+		},
+	)
+}
+
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
 func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
 	errHandler := defaultErrorHandler[N]()
@@ -22,21 +41,13 @@ func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptio
 	)
 }
 
-// Creates new Pipeline[T, U].
-func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
-	errHandler := defaultErrorHandler[U]()
-	pool := 0
-
-	for _, option := range opts {
-		errHandler, pool = option(errHandler, pool)
-	}
-
+// Adds error Handler to the Pipeline[T, U] resulting in new Pipeline[T, U].
+func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	return Pipeline[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
-			rw := newEventRW[T](pool)
-			r := startWorkers(ctx, h, errHandler, rw, readers, pool)
+			w, r := c(ctx, readers)
 
-			return rw.GetWriter(), r
+			return w, startWorkers(ctx, PassThrough[U](), h, r, readers, readers)
 		},
 	)
 }

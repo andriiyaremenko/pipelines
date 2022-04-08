@@ -224,4 +224,26 @@ var _ = Describe("Pipeline", func() {
 		Expect(value).To(Equal([]int{1, 1, 1, 1}))
 	})
 
+	It("should be able to append error handler", func() {
+		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
+			r.Write(pipelines.Event[int]{Payload: 1})
+		}
+		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
+
+		c := pipelines.New(handler1)
+		c = pipelines.AppendErrorHandler(c, handlerErr)
+
+		value, err := pipelines.Reduce(
+			c.Handle(ctx, "start"),
+			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
+			pipelines.NoError,
+		)
+
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(value).To(Equal([]int{1, 1, 1, 1}))
+	})
 })
