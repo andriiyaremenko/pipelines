@@ -6,6 +6,7 @@ import (
 
 // Creates new Pipeline[T, U].
 func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
+	h = withRecovery(h)
 	errHandler := defaultErrorHandler[U]()
 	pool := 0
 
@@ -25,6 +26,7 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 
 // Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
 func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
+	h = withRecovery(h)
 	errHandler := defaultErrorHandler[N]()
 	pool := 0
 
@@ -43,6 +45,8 @@ func Append[T, U, N any](c Pipeline[T, U], h Handler[U, N], opts ...HandlerOptio
 
 // Adds error Handler to the Pipeline[T, U] resulting in new Pipeline[T, U].
 func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
+	h = withRecovery(h)
+
 	return Pipeline[T, U](
 		func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
 			w, r := c(ctx, readers)

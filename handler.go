@@ -61,3 +61,15 @@ func defaultErrorHandler[U any]() Handler[error, U] {
 		w.Write(NewErrEvent[U](err))
 	}
 }
+
+func withRecovery[T, U any, H Handler[T, U]](handle H) H {
+	return func(ctx context.Context, w EventWriter[U], payload T) {
+		defer func() {
+			if r := recover(); r != nil {
+				w.Write(NewErrEvent[U](NewError(HandlerPanic, r)))
+			}
+		}()
+
+		handle(ctx, w, payload)
+	}
+}

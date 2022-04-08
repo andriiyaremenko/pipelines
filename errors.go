@@ -1,8 +1,11 @@
 package pipelines
 
 import (
+	"errors"
 	"fmt"
 )
+
+var HandlerPanic = errors.New("handler panicked")
 
 // Returns new Event[T] with error and zero value payload.
 func NewErrEvent[T any](err error) Event[T] {

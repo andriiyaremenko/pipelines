@@ -3,6 +3,7 @@ package pipelines_test
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/andriiyaremenko/pipelines"
 	. "github.com/onsi/ginkgo/v2"
@@ -123,11 +124,50 @@ var _ = Describe("Pipeline", func() {
 	})
 
 	It("should parallel work if worker pool was provided", func() {
+		mu := new(sync.Mutex)
+		once := new(sync.Once)
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
+		}
+		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
+			once.Do(mu.Lock)
+			r.Write(pipelines.Event[int]{Payload: 1 + e})
+		}
+		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
+			return p + 1, nil
+		}
+		c := pipelines.New(handler1)
+		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](2))
+		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+
+		err := pipelines.ForEach(
+			c.Handle(ctx, "start"),
+			func(i int, next int) {
+				Expect(next).To(Equal(3))
+
+				if i == 2 {
+					mu.Unlock()
+				}
+			},
+			pipelines.NoError,
+		)
+
+		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("should handle panic in handlers", func() {
+		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(pipelines.Event[int]{Payload: 1})
+			panic("oh no...")
+		}
+		handleErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {
+			Expect(e).Should(BeAssignableToTypeOf(new(pipelines.Error[any])))
+			Expect(e.(*pipelines.Error[any]).Payload).To(Equal("oh no..."))
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
 			r.Write(pipelines.Event[int]{Payload: 1 + e})
@@ -136,6 +176,7 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
+		c = pipelines.AppendErrorHandler(c, handleErr)
 		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](4))
 		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
 
@@ -146,7 +187,7 @@ var _ = Describe("Pipeline", func() {
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{3, 3, 3, 3}))
+		Expect(value).To(Equal([]int{3, 3, 3}))
 	})
 
 	It("should not leak gourutines", func() {
