@@ -124,8 +124,13 @@ var _ = Describe("Pipeline", func() {
 	})
 
 	It("should parallel work if worker pool was provided", func() {
-		mu := new(sync.Mutex)
-		once := new(sync.Once)
+		var (
+			mu1, mu2 sync.Mutex
+		)
+
+		locked := true
+		mu1.Lock()
+
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
 			r.Write(pipelines.Event[int]{Payload: 1})
 			r.Write(pipelines.Event[int]{Payload: 1})
@@ -133,8 +138,16 @@ var _ = Describe("Pipeline", func() {
 			r.Write(pipelines.Event[int]{Payload: 1})
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			once.Do(mu.Lock)
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			defer r.Write(pipelines.Event[int]{Payload: 1 + e})
+			// we want to lock it only one goroutine
+			mu2.Lock()
+			if locked {
+				locked = false
+
+				defer mu1.Unlock()
+				defer mu1.Lock()
+			}
+			mu2.Unlock()
 		}
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
@@ -149,7 +162,7 @@ var _ = Describe("Pipeline", func() {
 				Expect(next).To(Equal(3))
 
 				if i == 2 {
-					mu.Unlock()
+					mu1.Unlock()
 				}
 			},
 			pipelines.NoError,
