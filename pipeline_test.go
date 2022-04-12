@@ -139,7 +139,7 @@ var _ = Describe("Pipeline", func() {
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
 			defer r.Write(pipelines.Event[int]{Payload: 1 + e})
-			// we want to lock it only one goroutine
+			// we want to lock only one goroutine
 			mu2.Lock()
 			if locked {
 				locked = false
