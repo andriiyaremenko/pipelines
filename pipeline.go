@@ -14,7 +14,7 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
+	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[U]) {
 		rw := newEventRW[T](pool)
 
 		return rw.GetWriter(), startWorkers(ctx, h, errHandler, rw, readers, pool)
@@ -31,7 +31,7 @@ func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...Handler
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[N]) {
+	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[N]) {
 		w, r := c(ctx, pool)
 
 		return w, startWorkers(ctx, h, errHandler, r, readers, pool)
@@ -42,7 +42,7 @@ func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...Handler
 func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	h = withRecovery(h)
 
-	return func(ctx context.Context, readers int) (EventWriter[T], EventReader[U]) {
+	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[U]) {
 		w, r := c(ctx, readers)
 
 		return w, startWorkers(ctx, PassThrough[U](), h, r, readers, readers)
@@ -50,7 +50,7 @@ func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipelin
 }
 
 // Combination of Handlers into one Pipeline.
-type Pipeline[T, U any] func(context.Context, int) (EventWriter[T], EventReader[U])
+type Pipeline[T, U any] func(context.Context, int) (EventWriterCloser[T], EventReader[U])
 
 // Handles initial Event and returns result of Pipeline execution.
 func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) *Result[U] {
@@ -60,7 +60,7 @@ func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) *Result[U]
 	result := newResult(r.Read(), cancel)
 
 	w.Write(Event[T]{Payload: payload})
-	w.Done()
+	w.Close()
 
 	return result
 }
@@ -91,7 +91,7 @@ func startWorkers[T, U any](
 				handle(ctx, w, event.Payload)
 			}
 
-			w.Done()
+			w.Close()
 		}()
 	}
 

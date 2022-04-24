@@ -10,16 +10,24 @@ type EventReader[T any] interface {
 	Read() <-chan Event[T]
 
 	// Returns EventWriter instance on which this EventReader is based.
-	GetWriter() EventWriter[T]
+	GetWriter() EventWriterCloser[T]
 }
 
 // Serves to write Events in Handle.Handle to chain Events.
 type EventWriter[T any] interface {
 	// Writes Event to a channel.
 	Write(e Event[T])
+}
+
+// Serves to close EventWriter.
+type EventCloser[T any] interface {
 	// Signals that no more writes are expected.
-	// For internal use only!
-	Done()
+	Close()
+}
+
+type EventWriterCloser[T any] interface {
+	EventWriter[T]
+	EventCloser[T]
 }
 
 func newEventRW[T any](readers int) EventReader[T] {
@@ -41,7 +49,7 @@ func (r *eventRW[T]) Read() <-chan Event[T] {
 	return r.eventsChannel
 }
 
-func (r *eventRW[T]) GetWriter() EventWriter[T] {
+func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 	r.writersGroup.Add(1)
 
 	r.shutdown.Do(func() {
@@ -89,7 +97,7 @@ func (r *eventW[T]) Write(e Event[T]) {
 	}()
 }
 
-func (r *eventW[T]) Done() {
+func (r *eventW[T]) Close() {
 	go r.once.Do(func() {
 		r.writeWG.Wait()
 		r.rwMu.Lock()

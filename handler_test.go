@@ -15,8 +15,6 @@ func (writer TestWriter[T]) Write(event pipelines.Event[T]) {
 	writer(event)
 }
 
-func (writer TestWriter[T]) Done() {}
-
 var _ = Describe("Handler", func() {
 	It("HandleFunc will write success", func() {
 		fn := pipelines.HandleFunc(
