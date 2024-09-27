@@ -43,7 +43,7 @@ func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOp
 }
 
 // Adds error Handler to the `Pipeline[T, U]` resulting in new `Pipeline[T, U]`.
-func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
+func PipeErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	h = withRecovery(h)
 
 	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {

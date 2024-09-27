@@ -192,7 +192,7 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.AppendErrorHandler(c, handleErr)
+		c = pipelines.PipeErrorHandler(c, handleErr)
 		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[int](4))
 		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
@@ -311,7 +311,7 @@ var _ = Describe("Pipeline", func() {
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.AppendErrorHandler(c, handlerErr)
+		c = pipelines.PipeErrorHandler(c, handlerErr)
 
 		accumulated := []int{}
 		for value, err := range c.Handle(ctx, "start") {
