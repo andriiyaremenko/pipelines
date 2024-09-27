@@ -1,16 +1,8 @@
 package pipelines
 
 import (
-	"errors"
 	"fmt"
 )
-
-var HandlerPanic = errors.New("handler panicked")
-
-// Returns new Event[T] with error and zero value payload.
-func NewErrEvent[T any](err error) Event[T] {
-	return Event[T]{Err: err}
-}
 
 // Returns error with cause and payload.
 func NewError[T any](cause error, payload T) error {

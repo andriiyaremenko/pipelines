@@ -3,6 +3,7 @@ package pipelines_test
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/andriiyaremenko/pipelines"
 	. "github.com/onsi/ginkgo/v2"
@@ -11,8 +12,12 @@ import (
 
 type TestWriter[T any] func(event pipelines.Event[T])
 
-func (writer TestWriter[T]) Write(event pipelines.Event[T]) {
-	writer(event)
+func (writer TestWriter[T]) Write(event T) {
+	writer(pipelines.Event[T]{Payload: event})
+}
+
+func (writer TestWriter[T]) WriteError(err error) {
+	writer(pipelines.Event[T]{Err: err})
 }
 
 var _ = Describe("Handler", func() {
@@ -31,7 +36,7 @@ var _ = Describe("Handler", func() {
 
 	It("HandlerFunc will write error", func() {
 		fn := pipelines.HandleFunc(
-			pipelines.LiftErr(func(_ context.Context, n int) error { return errors.New("failed") }),
+			pipelines.LiftErr(func(_ context.Context, n int) error { return fmt.Errorf("failed") }),
 		)
 
 		var w TestWriter[int] = func(event pipelines.Event[int]) {

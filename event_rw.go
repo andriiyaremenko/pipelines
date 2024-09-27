@@ -16,18 +16,19 @@ type EventReader[T any] interface {
 // Serves to write Events in Handle.Handle to chain Events.
 type EventWriter[T any] interface {
 	// Writes Event to a channel.
-	Write(e Event[T])
+	Write(e T)
+	WriteError(err error)
 }
 
 // Serves to close EventWriter.
-type EventCloser[T any] interface {
+type EventCloser interface {
 	// Signals that no more writes are expected.
 	Close()
 }
 
 type EventWriterCloser[T any] interface {
 	EventWriter[T]
-	EventCloser[T]
+	EventCloser
 }
 
 func newEventRW[T any](readers int) EventReader[T] {
@@ -83,13 +84,26 @@ type eventW[T any] struct {
 	isDone bool
 }
 
-func (r *eventW[T]) Write(e Event[T]) {
+func (r *eventW[T]) Write(e T) {
 	r.writeWG.Add(1)
 	go func() {
 		r.rwMu.RLock()
 
 		if !r.isDone {
-			r.events <- e
+			r.events <- Event[T]{Payload: e}
+		}
+		r.rwMu.RUnlock()
+		r.writeWG.Done()
+	}()
+}
+
+func (r *eventW[T]) WriteError(err error) {
+	r.writeWG.Add(1)
+	go func() {
+		r.rwMu.RLock()
+
+		if !r.isDone {
+			r.events <- Event[T]{Err: err}
 		}
 
 		r.rwMu.RUnlock()

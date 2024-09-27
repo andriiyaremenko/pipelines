@@ -1,64 +1,23 @@
 package pipelines
 
 import (
+	"iter"
 	"sync"
 
 	"github.com/andriiyaremenko/pipelines/internal"
 )
 
-// Identity function of an error.
-var NoError = func(err error) error {
-	return err
-}
+// All will iterate through pipelines.Result.
+func All[T any](result *Result[T]) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		defer result.close()
 
-// Skips errors, by calling skip callback.
-func SkipErrors(skip func(error)) func(error) error {
-	return func(err error) error {
-		if err != nil {
-			skip(err)
-		}
-
-		return nil
-	}
-}
-
-// Interrupt will iterate through pipelines.Result until callback returns true.
-func Interrupt[T any, Interrupt func(T, error) bool](result *Result[T], interrupt Interrupt) bool {
-	defer result.close()
-
-	for e := range result.Events {
-		if interrupt(e.Payload, e.Err) {
-			return true
+		for e := range result.Events {
+			if !yield(e.Payload, e.Err) {
+				return
+			}
 		}
 	}
-
-	return false
-}
-
-// ForEach will iterate through pipelines.Result.
-func ForEach[T any, Iterate func(int, T)](
-	result *Result[T],
-	iterate Iterate,
-	handleErr func(error) error,
-) error {
-	defer result.close()
-
-	i := 0
-	for e := range result.Events {
-		if e.Err == nil {
-			iterate(i, e.Payload)
-
-			i++
-
-			continue
-		}
-
-		if err := handleErr(e.Err); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // Reduce will reduce pipelines.Result.
@@ -87,31 +46,18 @@ func Reduce[T, U any, Reduce func(U, T) U](
 
 // Will collect only errors if there is any.
 // Will exhaust the result.
-func Errors[T any](result *Result[T]) []error {
-	defer result.close()
+func Errors[T any](result *Result[T]) iter.Seq[error] {
+	return func(yield func(error) bool) {
+		defer result.close()
 
-	errors := make([]error, 0, 1)
-	for e := range result.Events {
-		if err := e.Err; err != nil {
-			errors = append(errors, err)
+		for e := range result.Events {
+			if e.Err != nil {
+				if !yield(e.Err) {
+					return
+				}
+			}
 		}
 	}
-
-	return errors
-}
-
-// Will return on first encountered error or nil.
-// Will exhaust the result.
-func FirstError[T any](result *Result[T]) error {
-	defer result.close()
-
-	for e := range result.Events {
-		if err := e.Err; err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func newResult[T any](events <-chan Event[T], stop func()) *Result[T] {
@@ -123,12 +69,9 @@ func newResult[T any](events <-chan Event[T], stop func()) *Result[T] {
 
 // Result returned by executing Pipeline
 type Result[T any] struct {
-	once sync.Once
-
-	// Returns Event[T] channel to read events returned by executing Pipeline.
 	Events <-chan Event[T]
-
-	stop func()
+	stop   func()
+	once   sync.Once
 }
 
 func (r *Result[T]) close() {

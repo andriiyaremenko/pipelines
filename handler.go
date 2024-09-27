@@ -2,6 +2,7 @@ package pipelines
 
 import (
 	"context"
+	"fmt"
 )
 
 // Handler is used to handle particular event.
@@ -38,7 +39,7 @@ func WithErrorHandler[T any](errorHandler Handler[error, T]) HandlerOptions[T] {
 // Handler that writes same payload it receives without changes.
 func PassThrough[T any]() Handler[T, T] {
 	return func(ctx context.Context, w EventWriter[T], payload T) {
-		w.Write(Event[T]{Payload: payload})
+		w.Write(payload)
 	}
 }
 
@@ -47,18 +48,18 @@ func HandleFunc[T, U any](handle Handle[T, U]) Handler[T, U] {
 	return func(ctx context.Context, w EventWriter[U], payload T) {
 		v, err := handle(ctx, payload)
 		if err != nil {
-			w.Write(NewErrEvent[U](NewError(err, payload)))
+			w.WriteError(NewError(err, payload))
 
 			return
 		}
 
-		w.Write(Event[U]{Payload: v})
+		w.Write(v)
 	}
 }
 
 func defaultErrorHandler[U any]() Handler[error, U] {
 	return func(ctx context.Context, w EventWriter[U], err error) {
-		w.Write(NewErrEvent[U](err))
+		w.WriteError(err)
 	}
 }
 
@@ -66,7 +67,7 @@ func withRecovery[T, U any, H Handler[T, U]](handle H) H {
 	return func(ctx context.Context, w EventWriter[U], payload T) {
 		defer func() {
 			if r := recover(); r != nil {
-				w.Write(NewErrEvent[U](NewError(HandlerPanic, r)))
+				w.WriteError(NewError(fmt.Errorf("recovered from panic: %v", r), payload))
 			}
 		}()
 

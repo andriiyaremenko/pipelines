@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// Creates new Pipeline[T, U].
+// Creates new `Pipeline[T, U]`.
 func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 	h = withRecovery(h)
 	errHandler := defaultErrorHandler[U]()
@@ -21,7 +21,7 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 	}
 }
 
-// Adds next Handler[U, H] to the Pipeline[T, U] resulting in new Pipeline[T, H].
+// Adds next `Handler[U, H]` to the `Pipeline[T, U]` resulting in new `Pipeline[T, H]`.
 func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
 	h = withRecovery(h)
 	errHandler := defaultErrorHandler[N]()
@@ -38,7 +38,7 @@ func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...Handler
 	}
 }
 
-// Adds error Handler to the Pipeline[T, U] resulting in new Pipeline[T, U].
+// Adds error Handler to the `Pipeline[T, U]` resulting in new `Pipeline[T, U]`.
 func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	h = withRecovery(h)
 
@@ -59,7 +59,7 @@ func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) *Result[U]
 
 	result := newResult(r.Read(), cancel)
 
-	w.Write(Event[T]{Payload: payload})
+	w.Write(payload)
 	w.Close()
 
 	return result
