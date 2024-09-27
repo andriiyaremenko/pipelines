@@ -2,6 +2,7 @@ package pipelines
 
 import (
 	"context"
+	"iter"
 )
 
 // Creates new `Pipeline[T, U]`.
@@ -22,7 +23,7 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 }
 
 // Adds next `Handler[U, H]` to the `Pipeline[T, U]` resulting in new `Pipeline[T, H]`.
-func Append[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
+func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
 	h = withRecovery(h)
 	errHandler := defaultErrorHandler[N]()
 	pool := 0
@@ -53,16 +54,27 @@ func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipelin
 type Pipeline[T, U any] func(context.Context, int) (EventWriterCloser[T], EventReader[U])
 
 // Handles initial Event and returns result of Pipeline execution.
-func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) *Result[U] {
-	ctx, cancel := context.WithCancel(ctx)
-	w, r := pipeline(ctx, 1)
+func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) iter.Seq2[U, error] {
+	return func(yield func(U, error) bool) {
+		ctx, cancel := context.WithCancel(ctx)
+		w, r := pipeline(ctx, 1)
 
-	result := newResult(r.Read(), cancel)
+		defer func() {
+			cancel()
 
-	w.Write(payload)
-	w.Close()
+			for range r.Read() {
+			}
+		}()
 
-	return result
+		w.Write(payload)
+		w.Close()
+
+		for e := range r.Read() {
+			if !yield(e.Payload, e.Err) {
+				return
+			}
+		}
+	}
 }
 
 func startWorkers[T, U any](

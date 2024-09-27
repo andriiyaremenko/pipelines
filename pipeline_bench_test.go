@@ -21,7 +21,7 @@ func BenchmarkSingleHandler(b *testing.B) {
 	)
 
 	for i := 0; i < b.N; i++ {
-		for range pipelines.All(c.Handle(ctx, nil)) {
+		for range c.Handle(ctx, nil) {
 		}
 	}
 }
@@ -40,10 +40,10 @@ func BenchmarkChainedEvent(b *testing.B) {
 	}
 
 	c := pipelines.New(handler1)
-	c = pipelines.Append(c, handler2)
+	c = pipelines.Pipe(c, handler2)
 
 	for i := 0; i < b.N; i++ {
-		for range pipelines.All(c.Handle(ctx, struct{}{})) {
+		for range c.Handle(ctx, struct{}{}) {
 		}
 	}
 }
@@ -71,11 +71,11 @@ func BenchmarkSeveralWrites(b *testing.B) {
 	}
 
 	c := pipelines.New(handler1)
-	c = pipelines.Append(c, handler2)
-	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+	c = pipelines.Pipe(c, handler2)
+	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
-		for range pipelines.All(c.Handle(ctx, struct{}{})) {
+		for range c.Handle(ctx, struct{}{}) {
 		}
 	}
 }
@@ -103,11 +103,11 @@ func BenchmarkParallelWorkers(b *testing.B) {
 	}
 
 	c := pipelines.New(handler1)
-	c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[any](4))
-	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+	c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {
-		for range pipelines.All(c.Handle(ctx, struct{}{})) {
+		for range c.Handle(ctx, struct{}{}) {
 		}
 	}
 }

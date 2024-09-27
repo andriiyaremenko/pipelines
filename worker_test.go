@@ -2,6 +2,7 @@ package pipelines_test
 
 import (
 	"context"
+	"iter"
 	"sync"
 	"time"
 
@@ -30,19 +31,20 @@ var _ = Describe("Worker", func() {
 		}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		var wg sync.WaitGroup
-		eventSink := func(r *pipelines.Result[int]) {
+		eventSink := func(result iter.Seq2[int, error]) {
 			accumulated := []int{}
-			for v, err := range pipelines.All(r) {
+			for v, err := range result {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(v).To(Equal(3))
 				accumulated = append(accumulated, v)
 			}
 
 			Expect(accumulated).To(Equal([]int{3, 3, 3, 3}))
+
 			wg.Done()
 		}
 
@@ -96,17 +98,15 @@ var _ = Describe("Worker", func() {
 
 		c := pipelines.New(handler1)
 
-		var wg sync.WaitGroup
-		eventSink := func(r *pipelines.Result[int]) {
+		eventSink := func(result iter.Seq2[int, error]) {
 			accumulated := []int{}
-			for v, err := range pipelines.All(r) {
+			for v, err := range result {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(v).To(Equal(1))
 				accumulated = append(accumulated, v)
 			}
 
 			Expect(accumulated).To(Equal([]int{1}))
-			wg.Done()
 		}
 
 		w := pipelines.NewWorker(ctx, eventSink, c)

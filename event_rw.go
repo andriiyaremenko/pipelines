@@ -75,13 +75,12 @@ func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 }
 
 type eventW[T any] struct {
+	events       chan Event[T]
+	writeWG      sync.WaitGroup
+	rwMu         sync.RWMutex
 	once         sync.Once
 	writeWGMutex sync.Mutex
-	rwMu         sync.RWMutex
-	writeWG      sync.WaitGroup
-
-	events chan Event[T]
-	isDone bool
+	isDone       bool
 }
 
 func (r *eventW[T]) Write(e T) {

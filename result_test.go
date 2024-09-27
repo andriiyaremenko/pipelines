@@ -35,13 +35,13 @@ var _ = Describe("Result", func() {
 		return p + 1, nil
 	}
 	c := pipelines.New(handler1)
-	c = pipelines.Append(c, handler2)
-	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+	c = pipelines.Pipe(c, handler2)
+	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-	Context("All", func() {
+	Context("NoErrors", func() {
 		It("should iterate through results using iterator", func() {
 			count := 0
-			for v, err := range pipelines.All(c.Handle(ctx, "ok")) {
+			for v, err := range c.Handle(ctx, "ok") {
 				Expect(v).To(Equal(3))
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -54,7 +54,7 @@ var _ = Describe("Result", func() {
 		It("Should work with break statement", func() {
 			count := 0
 
-			for v, err := range pipelines.All(c.Handle(ctx, "ok")) {
+			for v, err := range c.Handle(ctx, "ok") {
 				Expect(v).To(Equal(3))
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -71,7 +71,7 @@ var _ = Describe("Result", func() {
 		It("Should be able to accumulate result", func() {
 			aggregate := 0
 
-			for v, err := range pipelines.All(c.Handle(ctx, "ok")) {
+			for v, err := range c.Handle(ctx, "ok") {
 				Expect(v).To(Equal(3))
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -83,10 +83,14 @@ var _ = Describe("Result", func() {
 	})
 
 	Context("Errors", func() {
-		It("Should not interrupt if callback retuned false", func() {
+		It("Should get errors", func() {
 			countErrors := 0
 
-			for err := range pipelines.Errors(c.Handle(ctx, "produce error")) {
+			for _, err := range c.Handle(ctx, "produce error") {
+				if err == nil {
+					continue
+				}
+
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(BeAssignableToTypeOf(new(pipelines.Error[int])))
 				Expect(err.(*pipelines.Error[int]).Payload).To(Equal(1))
@@ -100,7 +104,11 @@ var _ = Describe("Result", func() {
 		It("Should work with break statement", func() {
 			countErrors := 0
 
-			for err := range pipelines.Errors(c.Handle(ctx, "produce error")) {
+			for _, err := range c.Handle(ctx, "produce error") {
+				if err == nil {
+					continue
+				}
+
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(BeAssignableToTypeOf(new(pipelines.Error[int])))
 				Expect(err.(*pipelines.Error[int]).Payload).To(Equal(1))

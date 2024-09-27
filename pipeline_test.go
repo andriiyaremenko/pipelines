@@ -17,7 +17,7 @@ var _ = Describe("Pipeline", func() {
 	It("can create pipeline", func() {
 		handler := func(context.Context, string) (string, error) { return "", nil }
 		c := pipelines.New(pipelines.HandleFunc(handler))
-		for _, err := range pipelines.All(c.Handle(ctx, "")) {
+		for _, err := range c.Handle(ctx, "") {
 			Expect(err).ShouldNot(HaveOccurred())
 		}
 	})
@@ -30,10 +30,10 @@ var _ = Describe("Pipeline", func() {
 			r.Write(42 + e)
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
+		c = pipelines.Pipe(c, handler2)
 
 		i := 0
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(84))
 			i++
@@ -56,11 +56,11 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		accumulated := []int{}
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(3))
 			accumulated = append(accumulated, value)
@@ -87,11 +87,11 @@ var _ = Describe("Pipeline", func() {
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2, pipelines.WithErrorHandler(handlerErr))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2, pipelines.WithErrorHandler(handlerErr))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		accumulated := []int{}
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(3))
 			accumulated = append(accumulated, value)
@@ -115,13 +115,14 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		errHappened := false
-		for err := range pipelines.Errors(c.Handle(ctx, "start")) {
-			Expect(err).Should(HaveOccurred())
-			errHappened = true
+		for _, err := range c.Handle(ctx, "start") {
+			if err != nil {
+				errHappened = true
+			}
 		}
 
 		Expect(errHappened).Should(BeTrue())
@@ -155,11 +156,11 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](2))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[int](2))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		i := 0
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(3))
 
@@ -191,11 +192,11 @@ var _ = Describe("Pipeline", func() {
 		}
 		c := pipelines.New(handler1)
 		c = pipelines.AppendErrorHandler(c, handleErr)
-		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](4))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[int](4))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		accumulated := []int{}
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(3))
 			accumulated = append(accumulated, value)
@@ -219,31 +220,31 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		for i := 10; i > 0; i-- {
-			for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+			for value, err := range c.Handle(ctx, "start") {
 				if err == nil {
 					Expect(value).To(Equal(3))
 				}
 			}
-			for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+			for value, err := range c.Handle(ctx, "start") {
 				if err == nil {
 					Expect(value).To(Equal(3))
 				}
 			}
-			for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+			for value, err := range c.Handle(ctx, "start") {
 				if err == nil {
 					Expect(value).To(Equal(3))
 				}
 			}
-			for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+			for value, err := range c.Handle(ctx, "start") {
 				if err == nil {
 					Expect(value).To(Equal(3))
 				}
 			}
-			for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+			for value, err := range c.Handle(ctx, "start") {
 				if err == nil {
 					Expect(value).To(Equal(3))
 				}
@@ -279,7 +280,7 @@ var _ = Describe("Pipeline", func() {
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(
+		c = pipelines.Pipe(
 			c,
 			pipelines.PassThrough[int](),
 			pipelines.WithErrorHandler(handlerErr),
@@ -287,7 +288,7 @@ var _ = Describe("Pipeline", func() {
 		)
 
 		accumulated := []int{}
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(1))
 			accumulated = append(accumulated, value)
@@ -310,7 +311,7 @@ var _ = Describe("Pipeline", func() {
 		c = pipelines.AppendErrorHandler(c, handlerErr)
 
 		accumulated := []int{}
-		for value, err := range pipelines.All(c.Handle(ctx, "start")) {
+		for value, err := range c.Handle(ctx, "start") {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(value).To(Equal(1))
 			accumulated = append(accumulated, value)

@@ -3,6 +3,7 @@ package pipelines
 import (
 	"context"
 	"errors"
+	"iter"
 	"sync"
 )
 
@@ -18,7 +19,7 @@ type Worker[T, U any] interface {
 
 // Returns Worker based on `Pipeline[T, U]`.
 // eventSink is used to process the `Result[U]` of execution.
-func NewWorker[T, U any](ctx context.Context, eventSink func(*Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
+func NewWorker[T, U any](ctx context.Context, eventSink func(iter.Seq2[U, error]), pipeline Pipeline[T, U]) Worker[T, U] {
 	w := &worker[T, U]{
 		ctx:       ctx,
 		started:   false,
@@ -35,7 +36,7 @@ type worker[T, U any] struct {
 	ctx       context.Context
 	pipeline  Pipeline[T, U]
 	eventPipe chan T
-	eventSink func(*Result[U])
+	eventSink func(iter.Seq2[U, error])
 	rwMu      sync.RWMutex
 	started   bool
 }
@@ -107,6 +108,7 @@ func (w *worker[T, U]) start() {
 					ctx, cancel := context.WithCancel(w.ctx)
 
 					w.eventSink(w.pipeline.Handle(ctx, event))
+
 					cancel()
 				}()
 			}
