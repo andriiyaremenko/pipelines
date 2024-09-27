@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/andriiyaremenko/pipelines"
 	. "github.com/onsi/ginkgo/v2"
@@ -250,6 +251,8 @@ var _ = Describe("Pipeline", func() {
 				}
 			}
 		}
+
+		time.Sleep(time.Millisecond * 250)
 
 		err := goleak.Find(
 			goleak.

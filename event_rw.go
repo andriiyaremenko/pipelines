@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"sync"
 )
 
@@ -31,15 +32,17 @@ type EventWriterCloser[T any] interface {
 	EventCloser
 }
 
-func newEventRW[T any](readers int) EventReader[T] {
+func newEventRW[T any](ctx context.Context) EventReader[T] {
 	rw := &eventRW[T]{
-		eventsChannel: make(chan Event[T], readers),
+		ctx:           ctx,
+		eventsChannel: make(chan Event[T]),
 	}
 
 	return rw
 }
 
 type eventRW[T any] struct {
+	ctx           context.Context
 	eventsChannel chan Event[T]
 
 	shutdown     sync.Once
@@ -60,8 +63,8 @@ func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 		}()
 	})
 
-	events := make(chan Event[T], 1)
-	w := &eventW[T]{events: events}
+	events := make(chan Event[T])
+	w := &eventW[T]{events: events, ctx: r.ctx}
 
 	go func() {
 		for e := range events {
@@ -75,6 +78,7 @@ func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 }
 
 type eventW[T any] struct {
+	ctx          context.Context
 	events       chan Event[T]
 	writeWG      sync.WaitGroup
 	rwMu         sync.RWMutex
@@ -83,41 +87,52 @@ type eventW[T any] struct {
 	isDone       bool
 }
 
-func (r *eventW[T]) Write(e T) {
-	r.writeWG.Add(1)
+func (w *eventW[T]) Write(e T) {
+	w.writeWG.Add(1)
 	go func() {
-		r.rwMu.RLock()
+		select {
+		case <-w.ctx.Done():
+		default:
+			w.rwMu.RLock()
 
-		if !r.isDone {
-			r.events <- Event[T]{Payload: e}
+			if !w.isDone {
+				w.events <- Event[T]{Payload: e}
+			}
+
+			w.rwMu.RUnlock()
 		}
-		r.rwMu.RUnlock()
-		r.writeWG.Done()
+
+		w.writeWG.Done()
 	}()
 }
 
-func (r *eventW[T]) WriteError(err error) {
-	r.writeWG.Add(1)
+func (w *eventW[T]) WriteError(err error) {
+	w.writeWG.Add(1)
 	go func() {
-		r.rwMu.RLock()
+		select {
+		case <-w.ctx.Done():
+		default:
+			w.rwMu.RLock()
 
-		if !r.isDone {
-			r.events <- Event[T]{Err: err}
+			if !w.isDone {
+				w.events <- Event[T]{Err: err}
+			}
+
+			w.rwMu.RUnlock()
 		}
 
-		r.rwMu.RUnlock()
-		r.writeWG.Done()
+		w.writeWG.Done()
 	}()
 }
 
-func (r *eventW[T]) Close() {
-	go r.once.Do(func() {
-		r.writeWG.Wait()
-		r.rwMu.Lock()
+func (w *eventW[T]) Close() {
+	go w.once.Do(func() {
+		w.writeWG.Wait()
+		w.rwMu.Lock()
 
-		r.isDone = true
+		w.isDone = true
 
-		close(r.events)
-		r.rwMu.Unlock()
+		close(w.events)
+		w.rwMu.Unlock()
 	})
 }

@@ -15,10 +15,10 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[U]) {
-		rw := newEventRW[T](pool)
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
+		rw := newEventRW[T](ctx)
 
-		return rw.GetWriter(), startWorkers(ctx, h, errHandler, rw, readers, pool)
+		return rw.GetWriter(), startWorkers(ctx, h, errHandler, rw, pool), pool
 	}
 }
 
@@ -32,10 +32,13 @@ func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOp
 		errHandler, pool = option(errHandler, pool)
 	}
 
-	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[N]) {
-		w, r := c(ctx, pool)
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[N], int) {
+		w, r, oldPool := c(ctx)
+		if pool < oldPool {
+			pool = oldPool
+		}
 
-		return w, startWorkers(ctx, h, errHandler, r, readers, pool)
+		return w, startWorkers(ctx, h, errHandler, r, pool), pool
 	}
 }
 
@@ -43,25 +46,28 @@ func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOp
 func AppendErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
 	h = withRecovery(h)
 
-	return func(ctx context.Context, readers int) (EventWriterCloser[T], EventReader[U]) {
-		w, r := c(ctx, readers)
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
+		w, r, pool := c(ctx)
 
-		return w, startWorkers(ctx, PassThrough[U](), h, r, readers, readers)
+		return w, startWorkers(ctx, PassThrough[U](), h, r, pool), pool
 	}
 }
 
 // Combination of Handlers into one Pipeline.
-type Pipeline[T, U any] func(context.Context, int) (EventWriterCloser[T], EventReader[U])
+type Pipeline[T, U any] func(context.Context) (EventWriterCloser[T], EventReader[U], int)
 
 // Handles initial Event and returns result of Pipeline execution.
 func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) iter.Seq2[U, error] {
 	return func(yield func(U, error) bool) {
 		ctx, cancel := context.WithCancel(ctx)
-		w, r := pipeline(ctx, 1)
+		w, r, _ := pipeline(ctx)
 
 		defer func() {
 			cancel()
 
+			// To avoid stacked goroutines we need to exhaust EventReader.Read() channel.
+			// Cancelling ctx will stop next writes, but due to it being executed in different goroutines
+			// might result into couple dropped events
 			for range r.Read() {
 			}
 		}()
@@ -82,9 +88,9 @@ func startWorkers[T, U any](
 	handle Handler[T, U],
 	errHandle Handler[error, U],
 	r EventReader[T],
-	readers, workers int,
+	workers int,
 ) EventReader[U] {
-	rw := newEventRW[U](readers)
+	rw := newEventRW[U](ctx)
 
 	if workers == 0 {
 		workers = 1
