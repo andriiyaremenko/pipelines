@@ -6,14 +6,17 @@ import (
 )
 
 // Handler is used to handle particular event.
-type Handler[T, U any] func(context.Context, EventWriter[U], T)
+type (
+	Handler[T, U any] func(context.Context, EventWriter[U], T)
+	ErrorHandler      func(context.Context, ErrorWriter, error)
+)
 
 // HandlerOption returns Handler, error Handler and worker pool to use in Pipeline.
-type HandlerOptions[T any] func(Handler[error, T], int) (Handler[error, T], int)
+type HandlerOptions func(ErrorHandler, int) (ErrorHandler, int)
 
 // Option to use with handler.
-func WithOptions[T any](errorHandler Handler[error, T], handlerPool int) HandlerOptions[T] {
-	return func(oldErrorHandler Handler[error, T], oldHandlerPool int) (Handler[error, T], int) {
+func WithOptions(errorHandler ErrorHandler, handlerPool int) HandlerOptions {
+	return func(oldErrorHandler ErrorHandler, oldHandlerPool int) (ErrorHandler, int) {
 		if errorHandler == nil {
 			errorHandler = oldErrorHandler
 		}
@@ -27,12 +30,12 @@ func WithOptions[T any](errorHandler Handler[error, T], handlerPool int) Handler
 }
 
 // Option that specifies handler pool size.
-func WithHandlerPool[T any](size int) HandlerOptions[T] {
-	return WithOptions[T](nil, size)
+func WithHandlerPool(size int) HandlerOptions {
+	return WithOptions(nil, size)
 }
 
 // Option that specifies error handler to use along handler.
-func WithErrorHandler[T any](errorHandler Handler[error, T]) HandlerOptions[T] {
+func WithErrorHandler(errorHandler ErrorHandler) HandlerOptions {
 	return WithOptions(errorHandler, 0)
 }
 
@@ -57,9 +60,21 @@ func HandleFunc[T, U any](handle Handle[T, U]) Handler[T, U] {
 	}
 }
 
-func defaultErrorHandler[U any]() Handler[error, U] {
-	return func(ctx context.Context, w EventWriter[U], err error) {
+func defaultErrorHandler() ErrorHandler {
+	return func(ctx context.Context, w ErrorWriter, err error) {
 		w.WriteError(err)
+	}
+}
+
+func errHandleWithRecovery[T, U any, H ErrorHandler](handle H) H {
+	return func(ctx context.Context, w ErrorWriter, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				w.WriteError(NewError(fmt.Errorf("recovered from panic: %v", r), err))
+			}
+		}()
+
+		handle(ctx, w, err)
 	}
 }
 
