@@ -6,9 +6,9 @@ import (
 )
 
 // Creates new `Pipeline[T, U]`.
-func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
+func New[T, U any](h Handler[T, U], opts ...HandlerOptions) Pipeline[T, U] {
 	h = withRecovery(h)
-	errHandler := defaultErrorHandler[U]()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -23,9 +23,9 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions[U]) Pipeline[T, U] {
 }
 
 // Adds next `Handler[U, H]` to the `Pipeline[T, U]` resulting in new `Pipeline[T, H]`.
-func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOptions[N]) Pipeline[T, N] {
+func Pipe[T, U, N any, P Pipeline[T, U]](p P, h Handler[U, N], opts ...HandlerOptions) Pipeline[T, N] {
 	h = withRecovery(h)
-	errHandler := defaultErrorHandler[N]()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -33,7 +33,7 @@ func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOp
 	}
 
 	return func(ctx context.Context) (EventWriterCloser[T], EventReader[N], int) {
-		w, r, oldPool := c(ctx)
+		w, r, oldPool := p(ctx)
 		if pool < oldPool {
 			pool = oldPool
 		}
@@ -42,12 +42,79 @@ func Pipe[T, U, N any, P Pipeline[T, U]](c P, h Handler[U, N], opts ...HandlerOp
 	}
 }
 
+func Pipe2[T, U, N, S any, P Pipeline[T, U]](p P, h1 Handler[U, N], h2 Handler[N, S], opts ...HandlerOptions) Pipeline[T, S] {
+	errHandler := defaultErrorHandler
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
+
+	_p := Pipe(p, h1, WithHandlerPool(pool))
+	h2 = withRecovery(h2)
+
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[S], int) {
+		w, r, oldPool := _p(ctx)
+		if pool < oldPool {
+			pool = oldPool
+		}
+
+		return w, startWorkers(ctx, h2, errHandler, r, pool), pool
+	}
+}
+
+func Pipe3[T, U, N, S, Y any, P Pipeline[T, U]](
+	p P, h1 Handler[U, N], h2 Handler[N, S], h3 Handler[S, Y], opts ...HandlerOptions,
+) Pipeline[T, Y] {
+	errHandler := defaultErrorHandler
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
+
+	_p := Pipe2(p, h1, h2, WithHandlerPool(pool))
+	h3 = withRecovery(h3)
+
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[Y], int) {
+		w, r, oldPool := _p(ctx)
+		if pool < oldPool {
+			pool = oldPool
+		}
+
+		return w, startWorkers(ctx, h3, errHandler, r, pool), pool
+	}
+}
+
+func Pipe4[T, U, N, S, Y, X any, P Pipeline[T, U]](
+	p P, h1 Handler[U, N], h2 Handler[N, S], h3 Handler[S, Y], h4 Handler[Y, X], opts ...HandlerOptions,
+) Pipeline[T, X] {
+	errHandler := defaultErrorHandler
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
+
+	_p := Pipe3(p, h1, h2, h3, WithHandlerPool(pool))
+	h4 = withRecovery(h4)
+
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[X], int) {
+		w, r, oldPool := _p(ctx)
+		if pool < oldPool {
+			pool = oldPool
+		}
+
+		return w, startWorkers(ctx, h4, errHandler, r, pool), pool
+	}
+}
+
 // Adds error Handler to the `Pipeline[T, U]` resulting in new `Pipeline[T, U]`.
-func PipeErrorHandler[T, U any](c Pipeline[T, U], h Handler[error, U]) Pipeline[T, U] {
-	h = withRecovery(h)
+func PipeErrorHandler[T, U any](p Pipeline[T, U], h ErrorHandler) Pipeline[T, U] {
+	h = errHandleWithRecovery(h)
 
 	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
-		w, r, pool := c(ctx)
+		w, r, pool := p(ctx)
 
 		return w, startWorkers(ctx, PassThrough[U](), h, r, pool), pool
 	}
@@ -86,7 +153,7 @@ func (pipeline Pipeline[T, U]) Handle(ctx context.Context, payload T) iter.Seq2[
 func startWorkers[T, U any](
 	ctx context.Context,
 	handle Handler[T, U],
-	errHandle Handler[error, U],
+	errHandle ErrorHandler,
 	r EventReader[T],
 	workers int,
 ) EventReader[U] {

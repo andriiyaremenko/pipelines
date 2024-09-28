@@ -103,7 +103,7 @@ func BenchmarkParallelWorkers(b *testing.B) {
 	}
 
 	c := pipelines.New(handler1)
-	c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[any](4))
+	c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool(4))
 	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 	for i := 0; i < b.N; i++ {

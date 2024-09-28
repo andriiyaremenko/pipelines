@@ -15,10 +15,16 @@ type EventReader[T any] interface {
 }
 
 // Serves to write Events in Handle.Handle to chain Events.
+type ErrorWriter interface {
+	// Writes Event to a channel.
+	WriteError(err error)
+}
+
+// Serves to write Events in Handle.Handle to chain Events.
 type EventWriter[T any] interface {
 	// Writes Event to a channel.
 	Write(e T)
-	WriteError(err error)
+	ErrorWriter
 }
 
 // Serves to close EventWriter.
