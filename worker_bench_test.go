@@ -2,6 +2,7 @@ package pipelines_test
 
 import (
 	"context"
+	"iter"
 	"testing"
 
 	"github.com/andriiyaremenko/pipelines"
@@ -28,10 +29,13 @@ func BenchmarkWorkerWithMultipleWrites(b *testing.B) {
 	}
 
 	c := pipelines.New(handler1)
-	c = pipelines.Append(c, handler2)
-	c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+	c = pipelines.Pipe(c, handler2)
+	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-	eventSink := func(r *pipelines.Result[any]) { _ = pipelines.FirstError(r) }
+	eventSink := func(result iter.Seq2[any, error]) {
+		for range result {
+		}
+	}
 	w := pipelines.NewWorker(ctx, eventSink, c)
 
 	for i := 0; i < b.N; i++ {

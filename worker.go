@@ -3,12 +3,11 @@ package pipelines
 import (
 	"context"
 	"errors"
+	"iter"
 	"sync"
 )
 
-var (
-	WorkerStopped = errors.New("command worker is stopped")
-)
+var ErrWorkerStopped = errors.New("command worker is stopped")
 
 // Asynchronous Pipeline
 type Worker[T, U any] interface {
@@ -18,9 +17,9 @@ type Worker[T, U any] interface {
 	IsRunning() bool
 }
 
-// Returns Worker based on Pipeline[T, U].
-// eventSink is used to process the Result[U] of execution.
-func NewWorker[T, U any](ctx context.Context, eventSink func(*Result[U]), pipeline Pipeline[T, U]) Worker[T, U] {
+// Returns Worker based on `Pipeline[T, U]`.
+// eventSink is used to process the `Result[U]` of execution.
+func NewWorker[T, U any](ctx context.Context, eventSink func(iter.Seq2[U, error]), pipeline Pipeline[T, U]) Worker[T, U] {
 	w := &worker[T, U]{
 		ctx:       ctx,
 		started:   false,
@@ -34,12 +33,11 @@ func NewWorker[T, U any](ctx context.Context, eventSink func(*Result[U]), pipeli
 }
 
 type worker[T, U any] struct {
-	ctx  context.Context
-	rwMu sync.RWMutex
-
+	ctx       context.Context
 	pipeline  Pipeline[T, U]
 	eventPipe chan T
-	eventSink func(*Result[U])
+	eventSink func(iter.Seq2[U, error])
+	rwMu      sync.RWMutex
 	started   bool
 }
 
@@ -48,7 +46,7 @@ func (w *worker[T, U]) Handle(payload T) error {
 	defer w.rwMu.RUnlock()
 
 	if !w.started {
-		return WorkerStopped
+		return ErrWorkerStopped
 	}
 
 	w.eventPipe <- payload
@@ -110,6 +108,7 @@ func (w *worker[T, U]) start() {
 					ctx, cancel := context.WithCancel(w.ctx)
 
 					w.eventSink(w.pipeline.Handle(ctx, event))
+
 					cancel()
 				}()
 			}

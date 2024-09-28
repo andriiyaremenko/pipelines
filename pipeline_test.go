@@ -2,8 +2,9 @@ package pipelines_test
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/andriiyaremenko/pipelines"
 	. "github.com/onsi/ginkgo/v2"
@@ -17,68 +18,68 @@ var _ = Describe("Pipeline", func() {
 	It("can create pipeline", func() {
 		handler := func(context.Context, string) (string, error) { return "", nil }
 		c := pipelines.New(pipelines.HandleFunc(handler))
-		err := pipelines.FirstError(c.Handle(ctx, ""))
-
-		Expect(err).ShouldNot(HaveOccurred())
+		for _, err := range c.Handle(ctx, "") {
+			Expect(err).ShouldNot(HaveOccurred())
+		}
 	})
 
 	It("can handle chained events", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 42})
+			r.Write(42)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 42 + e})
+			r.Write(42 + e)
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
+		c = pipelines.Pipe(c, handler2)
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			0, func(prev, next int) int { return prev + next },
-			pipelines.NoError,
-		)
+		i := 0
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(84))
+			i++
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal(84))
+		Expect(i).To(Equal(1))
 	})
 
 	It("can handle chained events with several writes", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-			pipelines.NoError,
-		)
+		accumulated := []int{}
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(3))
+			accumulated = append(accumulated, value)
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{3, 3, 3, 3}))
+		Expect(accumulated).To(Equal([]int{3, 3, 3, 3}))
 	})
 
 	It("should use error handlers", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.WriteError(fmt.Errorf("some error"))
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 
 		handlerFunc3 := func(ctx context.Context, n int) (int, error) {
@@ -87,58 +88,61 @@ var _ = Describe("Pipeline", func() {
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2, pipelines.WithErrorHandler(handlerErr))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2, pipelines.WithErrorHandler(handlerErr))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-			pipelines.NoError,
-		)
+		accumulated := []int{}
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(3))
+			accumulated = append(accumulated, value)
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{3, 3, 3, 3}))
+		Expect(accumulated).To(Equal([]int{3, 3, 3, 3}))
 	})
 
 	It("should show errors in result", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.WriteError(fmt.Errorf("some error"))
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
-		err := pipelines.FirstError(c.Handle(ctx, "start"))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-		Expect(err).Should(HaveOccurred())
-		Expect(err).Error().Should(Equal(errors.New("some error")))
+		errHappened := false
+		for _, err := range c.Handle(ctx, "start") {
+			if err != nil {
+				errHappened = true
+			}
+		}
+
+		Expect(errHappened).Should(BeTrue())
 	})
 
 	It("should parallel work if worker pool was provided", func() {
-		var (
-			mu1, mu2 sync.Mutex
-		)
+		var mu1, mu2 sync.Mutex
 
 		locked := true
 		mu1.Lock()
 
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			defer r.Write(pipelines.Event[int]{Payload: 1 + e})
+			defer r.Write(1 + e)
 			// we want to lock only one goroutine
 			mu2.Lock()
 			if locked {
@@ -153,88 +157,102 @@ var _ = Describe("Pipeline", func() {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](2))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[int](2))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-		err := pipelines.ForEach(
-			c.Handle(ctx, "start"),
-			func(i int, next int) {
-				Expect(next).To(Equal(3))
+		i := 0
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(3))
 
-				if i == 2 {
-					mu1.Unlock()
-				}
-			},
-			pipelines.NoError,
-		)
+			if i == 2 {
+				mu1.Unlock()
+			}
 
-		Expect(err).ShouldNot(HaveOccurred())
+			i++
+		}
 	})
 
 	It("should handle panic in handlers", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
 			panic("oh no...")
 		}
 		handleErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {
-			Expect(e).Should(BeAssignableToTypeOf(new(pipelines.Error[any])))
-			Expect(e.(*pipelines.Error[any]).Payload).To(Equal("oh no..."))
+			Expect(e).Should(BeAssignableToTypeOf(new(pipelines.Error[string])))
+			Expect(e.(*pipelines.Error[string]).Payload).To(Equal("start"))
+			Expect(e.(*pipelines.Error[string]).Error()).To(Equal("error processing string: recovered from panic: oh no..."))
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.AppendErrorHandler(c, handleErr)
-		c = pipelines.Append(c, handler2, pipelines.WithHandlerPool[int](4))
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.PipeErrorHandler(c, handleErr)
+		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool[int](4))
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-			pipelines.NoError,
-		)
+		accumulated := []int{}
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(3))
+			accumulated = append(accumulated, value)
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{3, 3, 3}))
+		Expect(accumulated).To(Equal([]int{3, 3, 3}))
 	})
 
 	It("should not leak gourutines", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.WriteError(fmt.Errorf("some error"))
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		for i := 10; i > 0; i-- {
-			_, _ = pipelines.Reduce(
-				c.Handle(ctx, "start"),
-				0, func(sum, next int) int { return sum + next },
-				pipelines.NoError,
-			)
-			_, _ = pipelines.Reduce(
-				c.Handle(ctx, "start"),
-				0, func(sum, next int) int { return sum + next },
-				pipelines.SkipErrors(func(error) {}),
-			)
-			_ = pipelines.FirstError(c.Handle(ctx, "start"))
-			_ = pipelines.Errors(c.Handle(ctx, "start"))
+			for value, err := range c.Handle(ctx, "start") {
+				if err == nil {
+					Expect(value).To(Equal(3))
+				}
+			}
+			for value, err := range c.Handle(ctx, "start") {
+				if err == nil {
+					Expect(value).To(Equal(3))
+				}
+			}
+			for value, err := range c.Handle(ctx, "start") {
+				if err == nil {
+					Expect(value).To(Equal(3))
+				}
+			}
+			for value, err := range c.Handle(ctx, "start") {
+				if err == nil {
+					Expect(value).To(Equal(3))
+				}
+			}
+			for value, err := range c.Handle(ctx, "start") {
+				if err == nil {
+					Expect(value).To(Equal(3))
+				}
+			}
 		}
+
+		time.Sleep(time.Millisecond * 250)
 
 		err := goleak.Find(
 			goleak.
@@ -245,6 +263,10 @@ var _ = Describe("Pipeline", func() {
 				IgnoreTopFunction(
 					"github.com/onsi/ginkgo/v2/internal/interrupt_handler.(*InterruptHandler).registerForInterrupts.func2",
 				),
+			goleak.
+				IgnoreAnyFunction(
+					"github.com/onsi/ginkgo/v2/internal.RegisterForProgressSignal.func1",
+				),
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -252,52 +274,52 @@ var _ = Describe("Pipeline", func() {
 
 	It("should use options without overriding", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.WriteError(fmt.Errorf("some error"))
+			r.Write(1)
 		}
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(
+		c = pipelines.Pipe(
 			c,
 			pipelines.PassThrough[int](),
 			pipelines.WithErrorHandler(handlerErr),
 			pipelines.WithHandlerPool[int](4),
 		)
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-			pipelines.NoError,
-		)
+		accumulated := []int{}
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(1))
+			accumulated = append(accumulated, value)
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{1, 1, 1, 1}))
+		Expect(accumulated).To(Equal([]int{1, 1, 1, 1}))
 	})
 
 	It("should be able to append error handler", func() {
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.NewErrEvent[int](errors.New("some error")))
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.WriteError(fmt.Errorf("some error"))
+			r.Write(1)
 		}
 		handlerErr := func(ctx context.Context, r pipelines.EventWriter[int], e error) {}
 
 		c := pipelines.New(handler1)
-		c = pipelines.AppendErrorHandler(c, handlerErr)
+		c = pipelines.PipeErrorHandler(c, handlerErr)
 
-		value, err := pipelines.Reduce(
-			c.Handle(ctx, "start"),
-			[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-			pipelines.NoError,
-		)
+		accumulated := []int{}
+		for value, err := range c.Handle(ctx, "start") {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(value).To(Equal(1))
+			accumulated = append(accumulated, value)
+		}
 
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(value).To(Equal([]int{1, 1, 1, 1}))
+		Expect(accumulated).To(Equal([]int{1, 1, 1, 1}))
 	})
 })

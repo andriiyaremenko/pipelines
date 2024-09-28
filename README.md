@@ -20,27 +20,23 @@ func main() {
 	ctx := context.Background()
 
 	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e string) {
-			r.Write(pipelines.Event[int]{Payload: 42})
+			r.Write(42)
 	}
 	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 42 + e})
+			r.Write(42 + e)
 	}
 
-	c := pipelines.New[string, int, pipelines.Handler[string, int]](handler1)
-	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
-	v, err := pipelines.Reduce(
-		c.Handle(ctx, "start"),
-		0, func(sum, next int) int { return sum + next },
-		pipelines.NoError,
-	)
+	c := pipelines.New(handler1)
+	c = pipelines.Pipe(c, handler2)
+	for value, err := range c.Handle(ctx, "start") {
+		// handle error
+		if err != nil {
+			// ...
+		}
 
-	// handle error
-	if err != nil {
+		// use result v:
 		// ...
 	}
-
-	// use result v:
-	// ...
 }
 ```
 
@@ -49,6 +45,7 @@ func main() {
 ```go
 import (
 	"context"
+    "iter"
 
 	"github.com/andriiyaremenko/pipelines"
 )
@@ -56,29 +53,25 @@ func main() {
 	ctx := context.Background()
 
 	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.E[int]{P: 42})
+			r.Write(42)
 	}
 	handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.E[int]{P: 42 + e})
+			r.Write(42 + e)
 	}
 
-	c := pipelines.New[int, int, pipelines.Handler[int, int]](handler1)
-	c = pipelines.Append[string, int, int, pipelines.Handler[int, int]](c, handler2)
+	c := pipelines.New(handler1)
+	c = pipelines.Pipe(c, handler2)
 
-	eventSink := func(r *pipelines.Result[int]) {
-		v, err := pipelines.Reduce(
-			r,
-			0, func(sum, next int) int { return sum + next },
-			pipelines.NoError,
-		)
+	eventSink := func(result iter.Seq2[int, error]) {
+		for value, err := range result {
+			// handle error
+			if err != nil {
+				// ...
+			}
 
-		// handle error
-		if err != nil {
+			// use result v:
 			// ...
 		}
-
-		// use result v:
-		// ...
 	}
 
 	w := pipelines.NewWorker(ctx, eventSink, c)

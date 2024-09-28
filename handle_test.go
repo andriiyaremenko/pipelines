@@ -48,11 +48,11 @@ var _ = Describe("Handle", func() {
 	})
 
 	It("can append handle", func() {
-		_fn := pipelines.AppendHandle(
+		_fn := pipelines.Merge(
 			pipelines.LiftNoContext(func(n int) (int, error) { return n + n, nil }),
 			pipelines.LiftNoContext(func(n int) (int, error) { return n * n, nil }),
 		)
-		fn := pipelines.AppendHandle(
+		fn := pipelines.Merge(
 			_fn,
 			pipelines.LiftNoContext(func(n int) (string, error) { return fmt.Sprintf("got %d", n), nil }),
 		)
@@ -61,7 +61,7 @@ var _ = Describe("Handle", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(v).To(Equal("got 4"))
 
-		errFn := pipelines.AppendHandle(
+		errFn := pipelines.Merge(
 			pipelines.LiftNoContext(func(n int) (int, error) { return 0, errors.New("failed") }),
 			fn,
 		)
@@ -73,19 +73,19 @@ var _ = Describe("Handle", func() {
 	})
 
 	It("can append error handle", func() {
-		_fn := pipelines.AppendHandle(
+		_fn := pipelines.Merge(
 			pipelines.LiftNoContext(func(n int) (int, error) { return n + n, nil }),
 			pipelines.LiftNoContext(func(n int) (int, error) { return n * n, nil }),
 		)
-		_errFn := pipelines.AppendHandle(
+		_errFn := pipelines.Merge(
 			_fn,
 			pipelines.LiftNoContext(func(n int) (int, error) { return 0, errors.New("failed") }),
 		)
-		_fn1 := pipelines.AppendErrHandle(
+		_fn1 := pipelines.MergeErrHandle(
 			_errFn,
 			pipelines.LiftNoContext(func(err error) (int, error) { return err.(*pipelines.Error[int]).Payload, nil }),
 		)
-		fn := pipelines.AppendHandle(
+		fn := pipelines.Merge(
 			_fn1,
 			pipelines.LiftNoContext(func(n int) (string, error) { return fmt.Sprintf("got %d", n), nil }),
 		)
@@ -94,11 +94,11 @@ var _ = Describe("Handle", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(v).To(Equal("got 1"))
 
-		_fn2 := pipelines.AppendErrHandle(
+		_fn2 := pipelines.MergeErrHandle(
 			_errFn,
 			pipelines.LiftNoContext(func(err error) (int, error) { return 0, fmt.Errorf("wrapped: %s", err) }),
 		)
-		fn = pipelines.AppendHandle(
+		fn = pipelines.Merge(
 			_fn2,
 			pipelines.LiftNoContext(func(n int) (string, error) { return fmt.Sprintf("got %d", n), nil }),
 		)
@@ -107,11 +107,11 @@ var _ = Describe("Handle", func() {
 		Expect(err).Should(HaveOccurred())
 		Expect(err).Should(MatchError("wrapped: error processing int: failed"))
 
-		_fn3 := pipelines.AppendErrHandle(
+		_fn3 := pipelines.MergeErrHandle(
 			_fn,
 			pipelines.LiftNoContext(func(err error) (int, error) { return 0, nil }),
 		)
-		fn = pipelines.AppendHandle(
+		fn = pipelines.Merge(
 			_fn3,
 			pipelines.LiftNoContext(func(n int) (string, error) { return fmt.Sprintf("got %d", n), nil }),
 		)

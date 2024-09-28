@@ -2,6 +2,7 @@ package pipelines_test
 
 import (
 	"context"
+	"iter"
 	"sync"
 	"time"
 
@@ -12,38 +13,38 @@ import (
 )
 
 var _ = Describe("Worker", func() {
-
 	It("should start worker and handle events", func() {
 		ctx := context.TODO()
 		ctx, cancel := context.WithCancel(ctx)
 
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
+			r.Write(1)
 		}
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
-			r.Write(pipelines.Event[int]{Payload: 1 + e})
+			r.Write(1 + e)
 		}
 		handlerFunc3 := func(ctx context.Context, n int) (int, error) {
 			return 1 + n, nil
 		}
 
 		c := pipelines.New(handler1)
-		c = pipelines.Append(c, handler2)
-		c = pipelines.Append(c, pipelines.HandleFunc(handlerFunc3))
+		c = pipelines.Pipe(c, handler2)
+		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
 
 		var wg sync.WaitGroup
-		eventSink := func(r *pipelines.Result[int]) {
-			value, err := pipelines.Reduce(
-				r,
-				[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-				pipelines.NoError,
-			)
+		eventSink := func(result iter.Seq2[int, error]) {
+			accumulated := []int{}
+			for v, err := range result {
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(v).To(Equal(3))
+				accumulated = append(accumulated, v)
+			}
 
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(value).To(Equal([]int{3, 3, 3, 3}))
+			Expect(accumulated).To(Equal([]int{3, 3, 3, 3}))
+
 			wg.Done()
 		}
 
@@ -78,6 +79,10 @@ var _ = Describe("Worker", func() {
 				IgnoreTopFunction(
 					"github.com/onsi/ginkgo/v2/internal/interrupt_handler.(*InterruptHandler).registerForInterrupts.func2",
 				),
+			goleak.
+				IgnoreAnyFunction(
+					"github.com/onsi/ginkgo/v2/internal.RegisterForProgressSignal.func1",
+				),
 		)
 
 		Expect(err).ShouldNot(HaveOccurred())
@@ -88,22 +93,20 @@ var _ = Describe("Worker", func() {
 		ctx, cancel := context.WithCancel(ctx)
 
 		handler1 := func(ctx context.Context, r pipelines.EventWriter[int], _ string) {
-			r.Write(pipelines.Event[int]{Payload: 1})
+			r.Write(1)
 		}
 
 		c := pipelines.New(handler1)
 
-		var wg sync.WaitGroup
-		eventSink := func(r *pipelines.Result[int]) {
-			value, err := pipelines.Reduce(
-				r,
-				[]int{}, func(arr []int, next int) []int { return append(arr, next) },
-				pipelines.NoError,
-			)
+		eventSink := func(result iter.Seq2[int, error]) {
+			accumulated := []int{}
+			for v, err := range result {
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(v).To(Equal(1))
+				accumulated = append(accumulated, v)
+			}
 
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(value).To(Equal([]int{1}))
-			wg.Done()
+			Expect(accumulated).To(Equal([]int{1}))
 		}
 
 		w := pipelines.NewWorker(ctx, eventSink, c)
@@ -115,6 +118,6 @@ var _ = Describe("Worker", func() {
 
 		Eventually(w.IsRunning()).Should(BeFalse())
 		Expect(err).Should(HaveOccurred())
-		Expect(err).Should(MatchError(pipelines.WorkerStopped))
+		Expect(err).Should(MatchError(pipelines.ErrWorkerStopped))
 	})
 })

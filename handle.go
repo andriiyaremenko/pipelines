@@ -2,9 +2,12 @@ package pipelines
 
 import (
 	"context"
-
-	"github.com/andriiyaremenko/pipelines/internal"
 )
+
+func zero[T any]() T {
+	var zero T
+	return zero
+}
 
 // Handles single input and produces single output.
 type Handle[T, U any] func(context.Context, T) (U, error)
@@ -31,11 +34,11 @@ func LiftNoContext[T, U any, Fn func(T) (U, error)](fn Fn) Handle[T, U] {
 }
 
 // Combines two Handles into one with input type T and output type N.
-func AppendHandle[T, U, N any, H1 Handle[T, U], H2 Handle[U, N]](h1 H1, h2 H2) Handle[T, N] {
+func Merge[T, U, N any, H1 Handle[T, U], H2 Handle[U, N]](h1 H1, h2 H2) Handle[T, N] {
 	return func(ctx context.Context, payload T) (N, error) {
 		v, err := h1(ctx, payload)
 		if err != nil {
-			return internal.Zero[N](), err
+			return zero[N](), err
 		}
 
 		return h2(ctx, v)
@@ -43,7 +46,7 @@ func AppendHandle[T, U, N any, H1 Handle[T, U], H2 Handle[U, N]](h1 H1, h2 H2) H
 }
 
 // Combines a Handle and error Handle into one with input type T and output type U.
-func AppendErrHandle[T, U any, H Handle[T, U], ErrH Handle[error, U]](h H, errH ErrH) Handle[T, U] {
+func MergeErrHandle[T, U any, H Handle[T, U], ErrH Handle[error, U]](h H, errH ErrH) Handle[T, U] {
 	return func(ctx context.Context, payload T) (U, error) {
 		v, err := h(ctx, payload)
 		if err != nil {
