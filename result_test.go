@@ -12,7 +12,7 @@ import (
 var _ = Describe("Result", func() {
 	ctx := context.TODO()
 
-	handler1 := func(ctx context.Context, r pipelines.EventWriter[int], command string) {
+	var handler1 pipelines.Handler[string, int] = func(ctx context.Context, r pipelines.EventWriter[int], command string) {
 		if command == "produce error" {
 			r.WriteError(pipelines.NewError(fmt.Errorf("error"), 1))
 			r.WriteError(pipelines.NewError(fmt.Errorf("error"), 1))
@@ -34,9 +34,8 @@ var _ = Describe("Result", func() {
 	handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 		return p + 1, nil
 	}
-	c := pipelines.New(handler1)
-	c = pipelines.Pipe(c, handler2)
-	c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
+
+	c := pipelines.Pipe2(handler1.ToPipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 	Context("NoErrors", func() {
 		It("should iterate through results using iterator", func() {

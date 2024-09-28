@@ -8,7 +8,7 @@ import (
 // Creates new `Pipeline[T, U]`.
 func New[T, U any](h Handler[T, U], opts ...HandlerOptions) Pipeline[T, U] {
 	h = withRecovery(h)
-	errHandler := defaultErrorHandler()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -25,7 +25,7 @@ func New[T, U any](h Handler[T, U], opts ...HandlerOptions) Pipeline[T, U] {
 // Adds next `Handler[U, H]` to the `Pipeline[T, U]` resulting in new `Pipeline[T, H]`.
 func Pipe[T, U, N any, P Pipeline[T, U]](p P, h Handler[U, N], opts ...HandlerOptions) Pipeline[T, N] {
 	h = withRecovery(h)
-	errHandler := defaultErrorHandler()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -43,7 +43,7 @@ func Pipe[T, U, N any, P Pipeline[T, U]](p P, h Handler[U, N], opts ...HandlerOp
 }
 
 func Pipe2[T, U, N, S any, P Pipeline[T, U]](p P, h1 Handler[U, N], h2 Handler[N, S], opts ...HandlerOptions) Pipeline[T, S] {
-	errHandler := defaultErrorHandler()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -66,7 +66,7 @@ func Pipe2[T, U, N, S any, P Pipeline[T, U]](p P, h1 Handler[U, N], h2 Handler[N
 func Pipe3[T, U, N, S, Y any, P Pipeline[T, U]](
 	p P, h1 Handler[U, N], h2 Handler[N, S], h3 Handler[S, Y], opts ...HandlerOptions,
 ) Pipeline[T, Y] {
-	errHandler := defaultErrorHandler()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -89,7 +89,7 @@ func Pipe3[T, U, N, S, Y any, P Pipeline[T, U]](
 func Pipe4[T, U, N, S, Y, X any, P Pipeline[T, U]](
 	p P, h1 Handler[U, N], h2 Handler[N, S], h3 Handler[S, Y], h4 Handler[Y, X], opts ...HandlerOptions,
 ) Pipeline[T, X] {
-	errHandler := defaultErrorHandler()
+	errHandler := defaultErrorHandler
 	pool := 0
 
 	for _, option := range opts {
@@ -111,7 +111,7 @@ func Pipe4[T, U, N, S, Y, X any, P Pipeline[T, U]](
 
 // Adds error Handler to the `Pipeline[T, U]` resulting in new `Pipeline[T, U]`.
 func PipeErrorHandler[T, U any](p Pipeline[T, U], h ErrorHandler) Pipeline[T, U] {
-	h = errHandleWithRecovery[T, U](h)
+	h = errHandleWithRecovery(h)
 
 	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
 		w, r, pool := p(ctx)

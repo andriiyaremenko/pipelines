@@ -6,10 +6,17 @@ import (
 )
 
 // Handler is used to handle particular event.
-type (
-	Handler[T, U any] func(context.Context, EventWriter[U], T)
-	ErrorHandler      func(context.Context, ErrorWriter, error)
-)
+type Handler[T, U any] func(context.Context, EventWriter[U], T)
+
+func (h Handler[T, U]) ToPipeline() Pipeline[T, U] {
+	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
+		rw := newEventRW[T](ctx)
+
+		return rw.GetWriter(), startWorkers(ctx, h, defaultErrorHandler, rw, 0), 0
+	}
+}
+
+type ErrorHandler func(context.Context, ErrorWriter, error)
 
 // HandlerOption returns Handler, error Handler and worker pool to use in Pipeline.
 type HandlerOptions func(ErrorHandler, int) (ErrorHandler, int)
@@ -60,13 +67,11 @@ func HandleFunc[T, U any](handle Handle[T, U]) Handler[T, U] {
 	}
 }
 
-func defaultErrorHandler() ErrorHandler {
-	return func(ctx context.Context, w ErrorWriter, err error) {
-		w.WriteError(err)
-	}
+var defaultErrorHandler ErrorHandler = func(ctx context.Context, w ErrorWriter, err error) {
+	w.WriteError(err)
 }
 
-func errHandleWithRecovery[T, U any, H ErrorHandler](handle H) H {
+func errHandleWithRecovery(handle ErrorHandler) ErrorHandler {
 	return func(ctx context.Context, w ErrorWriter, err error) {
 		defer func() {
 			if r := recover(); r != nil {
