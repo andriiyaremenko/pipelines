@@ -17,7 +17,7 @@ var _ = Describe("Pipeline", func() {
 
 	It("can create pipeline", func() {
 		handler := func(context.Context, string) (string, error) { return "", nil }
-		c := pipelines.New(pipelines.HandleFunc(handler))
+		c := pipelines.HandleFunc(handler).Pipeline()
 		for _, err := range c.Handle(ctx, "") {
 			Expect(err).ShouldNot(HaveOccurred())
 		}
@@ -30,8 +30,7 @@ var _ = Describe("Pipeline", func() {
 		handler2 := func(ctx context.Context, r pipelines.EventWriter[int], e int) {
 			r.Write(42 + e)
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe(c, handler2)
+		c := pipelines.Pipe(pipelines.Handler[string, int](handler1).Pipeline(), handler2)
 
 		i := 0
 		for value, err := range c.Handle(ctx, "start") {
@@ -56,8 +55,7 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe2(c, handler2, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.Pipe2(pipelines.Handler[string, int](handler1).Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 		accumulated := []int{}
 		for value, err := range c.Handle(ctx, "start") {
@@ -86,9 +84,8 @@ var _ = Describe("Pipeline", func() {
 		}
 		handlerErr := func(ctx context.Context, r pipelines.ErrorWriter, e error) {}
 
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe2(
-			c,
+		c := pipelines.Pipe2(
+			pipelines.Handler[string, int](handler1).Pipeline(),
 			handler2,
 			pipelines.HandleFunc(handlerFunc3), pipelines.WithErrorHandler(handlerErr),
 		)
@@ -117,8 +114,7 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe2(c, handler2, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.Pipe2(pipelines.Handler[string, int](handler1).Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 		errHappened := false
 		for _, err := range c.Handle(ctx, "start") {
@@ -157,8 +153,7 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe2(c, handler2, pipelines.HandleFunc(handlerFunc3), pipelines.WithHandlerPool(2))
+		c := pipelines.Pipe2(pipelines.Handler[string, int](handler1).Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3), pipelines.WithHandlerPool(2))
 
 		i := 0
 		for value, err := range c.Handle(ctx, "start") {
@@ -191,10 +186,13 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.PipeErrorHandler(c, handleErr)
-		c = pipelines.Pipe(c, handler2, pipelines.WithHandlerPool(4))
-		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.Pipe2(
+			pipelines.Handler[string, int](handler1).Pipeline(),
+			handler2,
+			pipelines.HandleFunc(handlerFunc3),
+			pipelines.WithErrorHandler(handleErr),
+			pipelines.WithHandlerPool(4),
+		)
 
 		accumulated := []int{}
 		for value, err := range c.Handle(ctx, "start") {
@@ -220,9 +218,7 @@ var _ = Describe("Pipeline", func() {
 		handlerFunc3 := func(ctx context.Context, p int) (int, error) {
 			return p + 1, nil
 		}
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe(c, handler2)
-		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.Pipe2(pipelines.Handler[string, int](handler1).Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 		for i := 10; i > 0; i-- {
 			for value, err := range c.Handle(ctx, "start") {
@@ -282,9 +278,8 @@ var _ = Describe("Pipeline", func() {
 		}
 		handlerErr := func(ctx context.Context, r pipelines.ErrorWriter, e error) {}
 
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe(
-			c,
+		c := pipelines.Pipe(
+			pipelines.Handler[string, int](handler1).Pipeline(),
 			pipelines.PassThrough[int](),
 			pipelines.WithErrorHandler(handlerErr),
 			pipelines.WithHandlerPool(4),
@@ -310,8 +305,7 @@ var _ = Describe("Pipeline", func() {
 		}
 		handlerErr := func(ctx context.Context, r pipelines.ErrorWriter, e error) {}
 
-		c := pipelines.New(handler1)
-		c = pipelines.PipeErrorHandler(c, handlerErr)
+		c := pipelines.PipeErrorHandler(pipelines.Handler[string, int](handler1).Pipeline(), handlerErr)
 
 		accumulated := []int{}
 		for value, err := range c.Handle(ctx, "start") {

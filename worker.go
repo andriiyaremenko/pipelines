@@ -5,6 +5,7 @@ import (
 	"errors"
 	"iter"
 	"sync"
+	"sync/atomic"
 )
 
 var ErrWorkerStopped = errors.New("command worker is stopped")
@@ -22,7 +23,6 @@ type Worker[T, U any] interface {
 func NewWorker[T, U any](ctx context.Context, eventSink func(iter.Seq2[U, error]), pipeline Pipeline[T, U]) Worker[T, U] {
 	w := &worker[T, U]{
 		ctx:       ctx,
-		started:   false,
 		eventSink: eventSink,
 		pipeline:  pipeline,
 	}
@@ -37,15 +37,11 @@ type worker[T, U any] struct {
 	pipeline  Pipeline[T, U]
 	eventPipe chan T
 	eventSink func(iter.Seq2[U, error])
-	rwMu      sync.RWMutex
-	started   bool
+	started   atomic.Bool
 }
 
 func (w *worker[T, U]) Handle(payload T) error {
-	w.rwMu.RLock()
-	defer w.rwMu.RUnlock()
-
-	if !w.started {
+	if !w.started.Load() {
 		return ErrWorkerStopped
 	}
 
@@ -55,35 +51,24 @@ func (w *worker[T, U]) Handle(payload T) error {
 }
 
 func (w *worker[T, U]) IsRunning() bool {
-	w.rwMu.RLock()
-	defer w.rwMu.RUnlock()
-
-	return w.started
+	return w.started.Load()
 }
 
 func (w *worker[T, U]) start() {
-	if w.started {
+	if w.started.Load() {
 		return
 	}
 
-	w.rwMu.Lock()
-
 	w.eventPipe = make(chan T)
-	w.started = true
-
-	w.rwMu.Unlock()
+	w.started.Store(true)
 
 	go func() {
 		var wg sync.WaitGroup
 		shutdown := func() {
-			w.rwMu.Lock()
-
 			wg.Wait()
 
-			w.started = false
+			w.started.Store(false)
 			close(w.eventPipe)
-
-			w.rwMu.Unlock()
 		}
 
 		for {

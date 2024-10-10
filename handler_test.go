@@ -10,14 +10,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type TestWriter[T any] func(event pipelines.Event[T])
+type TestWriter[T any] func(event *pipelines.Event[T])
 
 func (writer TestWriter[T]) Write(event T) {
-	writer(pipelines.Event[T]{Payload: event})
+	writer(&pipelines.Event[T]{Payload: event})
 }
 
 func (writer TestWriter[T]) WriteError(err error) {
-	writer(pipelines.Event[T]{Err: err})
+	writer(&pipelines.Event[T]{Err: err})
 }
 
 var _ = Describe("Handler", func() {
@@ -26,7 +26,7 @@ var _ = Describe("Handler", func() {
 			pipelines.LiftOk(func(_ context.Context, n int) int { return n + 1 }),
 		)
 
-		var w TestWriter[int] = func(event pipelines.Event[int]) {
+		var w TestWriter[int] = func(event *pipelines.Event[int]) {
 			Expect(event.Err).ShouldNot(HaveOccurred())
 			Expect(event.Payload).To(Equal(2))
 		}
@@ -39,7 +39,7 @@ var _ = Describe("Handler", func() {
 			pipelines.LiftErr(func(_ context.Context, n int) error { return fmt.Errorf("failed") }),
 		)
 
-		var w TestWriter[int] = func(event pipelines.Event[int]) {
+		var w TestWriter[int] = func(event *pipelines.Event[int]) {
 			Expect(event.Err).Should(HaveOccurred())
 			Expect(event.Err).Should(BeAssignableToTypeOf(new(pipelines.Error[int])))
 			Expect(event.Err).To(MatchError("error processing int: failed"))

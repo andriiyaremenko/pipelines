@@ -5,23 +5,6 @@ import (
 	"iter"
 )
 
-// Creates new `Pipeline[T, U]`.
-func New[T, U any](h Handler[T, U], opts ...HandlerOptions) Pipeline[T, U] {
-	h = withRecovery(h)
-	errHandler := defaultErrorHandler
-	pool := 0
-
-	for _, option := range opts {
-		errHandler, pool = option(errHandler, pool)
-	}
-
-	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
-		rw := newEventRW[T](ctx)
-
-		return rw.GetWriter(), startWorkers(ctx, h, errHandler, rw, pool), pool
-	}
-}
-
 // Adds next `Handler[U, H]` to the `Pipeline[T, U]` resulting in new `Pipeline[T, H]`.
 func Pipe[T, U, N any, P Pipeline[T, U]](p P, h Handler[U, N], opts ...HandlerOptions) Pipeline[T, N] {
 	h = withRecovery(h)
@@ -174,6 +157,7 @@ func startWorkers[T, U any](
 				}
 
 				handle(ctx, w, event.Payload)
+				r.Dispose(event)
 			}
 
 			w.Close()

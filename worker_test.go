@@ -30,9 +30,7 @@ var _ = Describe("Worker", func() {
 			return 1 + n, nil
 		}
 
-		c := pipelines.New(handler1)
-		c = pipelines.Pipe(c, handler2)
-		c = pipelines.Pipe(c, pipelines.HandleFunc(handlerFunc3))
+		c := pipelines.Pipe2(pipelines.Handler[string, int](handler1).Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 		var wg sync.WaitGroup
 		eventSink := func(result iter.Seq2[int, error]) {
@@ -96,8 +94,6 @@ var _ = Describe("Worker", func() {
 			r.Write(1)
 		}
 
-		c := pipelines.New(handler1)
-
 		eventSink := func(result iter.Seq2[int, error]) {
 			accumulated := []int{}
 			for v, err := range result {
@@ -109,7 +105,7 @@ var _ = Describe("Worker", func() {
 			Expect(accumulated).To(Equal([]int{1}))
 		}
 
-		w := pipelines.NewWorker(ctx, eventSink, c)
+		w := pipelines.NewWorker(ctx, eventSink, pipelines.Handler[string, int](handler1).Pipeline())
 
 		cancel()
 		time.Sleep(time.Millisecond * 250)

@@ -8,7 +8,15 @@ import (
 // Handler is used to handle particular event.
 type Handler[T, U any] func(context.Context, EventWriter[U], T)
 
-func (h Handler[T, U]) ToPipeline() Pipeline[T, U] {
+func (h Handler[T, U]) Pipeline(opts ...HandlerOptions) Pipeline[T, U] {
+	h = withRecovery(h)
+	errHandler := defaultErrorHandler
+	pool := 0
+
+	for _, option := range opts {
+		errHandler, pool = option(errHandler, pool)
+	}
+
 	return func(ctx context.Context) (EventWriterCloser[T], EventReader[U], int) {
 		rw := newEventRW[T](ctx)
 

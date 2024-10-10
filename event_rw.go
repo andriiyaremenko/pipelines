@@ -3,12 +3,16 @@ package pipelines
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 // Serves to pass Events to Handlers.
 type EventReader[T any] interface {
 	// Returns Event[T] channel.
-	Read() <-chan Event[T]
+	Read() <-chan *Event[T]
+
+	// Disposes the event
+	Dispose(*Event[T])
 
 	// Returns EventWriter instance on which this EventReader is based.
 	GetWriter() EventWriterCloser[T]
@@ -41,22 +45,31 @@ type EventWriterCloser[T any] interface {
 func newEventRW[T any](ctx context.Context) EventReader[T] {
 	rw := &eventRW[T]{
 		ctx:           ctx,
-		eventsChannel: make(chan Event[T]),
+		eventsChannel: make(chan *Event[T]),
+		pool: &sync.Pool{
+			New: func() any {
+				return &Event[T]{}
+			},
+		},
 	}
 
 	return rw
 }
 
 type eventRW[T any] struct {
+	pool          *sync.Pool
 	ctx           context.Context
-	eventsChannel chan Event[T]
-
-	shutdown     sync.Once
-	writersGroup sync.WaitGroup
+	eventsChannel chan *Event[T]
+	writersGroup  sync.WaitGroup
+	shutdown      sync.Once
 }
 
-func (r *eventRW[T]) Read() <-chan Event[T] {
+func (r *eventRW[T]) Read() <-chan *Event[T] {
 	return r.eventsChannel
+}
+
+func (r *eventRW[T]) Dispose(e *Event[T]) {
+	r.pool.Put(e)
 }
 
 func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
@@ -69,8 +82,8 @@ func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 		}()
 	})
 
-	events := make(chan Event[T])
-	w := &eventW[T]{events: events, ctx: r.ctx}
+	events := make(chan *Event[T])
+	w := &eventW[T]{events: events, ctx: r.ctx, pool: r.pool}
 
 	go func() {
 		for e := range events {
@@ -84,61 +97,56 @@ func (r *eventRW[T]) GetWriter() EventWriterCloser[T] {
 }
 
 type eventW[T any] struct {
-	ctx          context.Context
-	events       chan Event[T]
-	writeWG      sync.WaitGroup
-	rwMu         sync.RWMutex
-	once         sync.Once
-	writeWGMutex sync.Mutex
-	isDone       bool
+	pool    *sync.Pool
+	ctx     context.Context
+	events  chan *Event[T]
+	writeWG sync.WaitGroup
+	once    sync.Once
+	isDone  atomic.Bool
 }
 
 func (w *eventW[T]) Write(e T) {
-	w.writeWG.Add(1)
-	go func() {
-		select {
-		case <-w.ctx.Done():
-		default:
-			w.rwMu.RLock()
-
-			if !w.isDone {
-				w.events <- Event[T]{Payload: e}
+	if !w.isDone.Load() {
+		w.writeWG.Add(1)
+		go func() {
+			select {
+			case <-w.ctx.Done():
+			default:
+				if !w.isDone.Load() {
+					event := w.pool.Get().(*Event[T])
+					event.Payload = e
+					w.events <- event
+				}
 			}
 
-			w.rwMu.RUnlock()
-		}
-
-		w.writeWG.Done()
-	}()
+			w.writeWG.Done()
+		}()
+	}
 }
 
 func (w *eventW[T]) WriteError(err error) {
-	w.writeWG.Add(1)
-	go func() {
-		select {
-		case <-w.ctx.Done():
-		default:
-			w.rwMu.RLock()
-
-			if !w.isDone {
-				w.events <- Event[T]{Err: err}
+	if !w.isDone.Load() {
+		w.writeWG.Add(1)
+		go func() {
+			select {
+			case <-w.ctx.Done():
+			default:
+				if !w.isDone.Load() {
+					event := w.pool.Get().(*Event[T])
+					event.Err = err
+					w.events <- event
+				}
 			}
 
-			w.rwMu.RUnlock()
-		}
-
-		w.writeWG.Done()
-	}()
+			w.writeWG.Done()
+		}()
+	}
 }
 
 func (w *eventW[T]) Close() {
 	go w.once.Do(func() {
 		w.writeWG.Wait()
-		w.rwMu.Lock()
-
-		w.isDone = true
-
+		w.isDone.Store(true)
 		close(w.events)
-		w.rwMu.Unlock()
 	})
 }

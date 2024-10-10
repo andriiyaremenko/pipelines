@@ -35,7 +35,7 @@ var _ = Describe("Result", func() {
 		return p + 1, nil
 	}
 
-	c := pipelines.Pipe2(handler1.ToPipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
+	c := pipelines.Pipe2(handler1.Pipeline(), handler2, pipelines.HandleFunc(handlerFunc3))
 
 	Context("NoErrors", func() {
 		It("should iterate through results using iterator", func() {
